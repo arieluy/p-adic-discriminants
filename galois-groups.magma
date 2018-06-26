@@ -1,0 +1,19 @@
+function Orbits2(X, H, G)
+    a,b,c := CosetAction(X,H);
+    return [#s : s in Orbits(a(G))];
+end function;
+
+function TINs(G)
+	assert IsTransitive(G);
+	G1 := Stabilizer(G,1);
+	subs := [s : s in Subgroups(G) | G1 subset s`subgroup];
+	L := [];
+	for s in subs do
+		a, b, c := CosetAction(G, s`subgroup);
+		n, d := TransitiveGroupIdentification(a(G));
+		if d ne 6 and d ne 1 then
+			Append(~L, IntegerToString(d) cat "T" cat IntegerToString(n));
+		end if;
+	end for;
+	return L; 
+end function;
