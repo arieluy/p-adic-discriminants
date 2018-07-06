@@ -1,17 +1,20 @@
-// from Chad Awtrey
+// modified from Chad Awtrey
 
 // Generates extensions of degree p^2
-CyclicDegreePSquared := function(p,Zp)
+CyclicDegreePSquared := function(p)
+    Zp := pAdicRing(p, 30*p^2-p);
     Zpx<x> := PolynomialRing(Zp);
     pols := [];
     for b in [0..p-1] do for a in [0..p-1] do
         pols := pols cat [x^(p^2)+b*p^2*x^(p^2-1)+p^2*x^(p^2-2)+p*(p-1)*x^(p*(p-1))+(p-1)*p^2*x^(p*(p-1)-1)+a*p^3+p+p^2*(p-1-b)]; end for; end for;
-    return v;
+    return pols;
 end function;
 
+
 // Generates extensions of degree p^3
-CyclicDegreePCubed := function(p,Zp)
-    Zp<x> := PolynomialRing(Zp);
+CyclicDegreePCubed := function(p)
+    Zp := pAdicRing(p, 4*p^3-p^2-p-1);
+    Zpx<x> := PolynomialRing(Zp);
     pols := [];
     for a in [0..p-1] do for b in [0..p-1] do for c in [0..p-1] do 
       if b lt p-1 then bb := p^3*(p-2-b); end if; 
@@ -20,3 +23,8 @@ CyclicDegreePCubed := function(p,Zp)
       end for; end for; end for;
     return pols;
 end function;
+
+// Zx<x> := PolynomialRing(Integers());
+// l := CyclicDegreePSquared(3); l;
+// for p in l do Discriminant(Zx!p); Valuation(Discriminant(p)); end for;
+
