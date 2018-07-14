@@ -1,0 +1,1060 @@
+function  IspGroup(G,p)
+
+    return Order(G) eq p^(Valuation(Order(G),p));
+
+end function;
+
+
+
+function QuickIsSubgroup(H,G) 
+
+//Smaller Group first
+
+//Is H conjugate to a subgroup of G?  Doing a partial check rather than computing subgroups of G since that can be time consuming.
+
+//Instead we check the order and exponent of the two groups as well as whether or not they are abelian and whether or not they are cyclic.  
+
+	B:=[true];
+
+	if IsDivisibleBy(Order(G),Order(H)) then
+
+		Append(~B, true);
+	else
+
+		return false;
+	end if;
+
+	
+	if IsDivisibleBy(Exponent(G),Exponent(H)) then
+
+		Append(~B, true);
+	else
+
+		return false;
+	end if;
+
+	if IsAbelian(G) then
+
+		if IsAbelian(H) then
+			Append(~B, true);
+		else
+			return false;
+		end if;
+	end if;
+
+
+	if IsCyclic(G) then
+
+		if IsCyclic(H) then
+			Append(~B, true);
+		else
+			return false;
+		end if;
+	end if;
+
+
+	return Set(B) eq {true};
+
+end function;
+
+
+function GlobalGalFilter(Candidates,phi)
+
+	n:=Degree(phi);
+
+	Z:=Integers();
+	Zw<w>:=PolynomialRing(Z);
+
+	Zphi:=Zw!phi;
+
+	W:=GaloisGroup(Zphi);
+
+	if IsIsomorphic(Sym(n), W) then
+vprint GaloisTower,2: "Filtering: Global galois group is symmetric group and not useful";
+		return Candidates;
+	end if;
+
+	if IsIsomorphic(Alt(n), W) then
+vprint GaloisTower,2: "Filtering: Global galois group is alternating group and not useful";
+		return Candidates;
+	end if;
+
+
+	RemainingCandidates:=[G: G in Candidates|QuickIsSubgroup(G,W)];
+
+vprint GaloisTower,2: "Filtering: Global Galois Group",W,"-- Remaining candidates:", #Candidates;
+
+	return RemainingCandidates;
+
+
+end function;
+
+
+function Only_One(lis)
+
+//Confirms that, up to isomorphism, there is only one candidate group left.
+
+	G:=lis[1];
+	i:=1;
+
+	while i lt #lis do
+		H:=lis[i+1];
+		bool:=IsIsomorphic(G,H);
+
+		if bool eq false then
+			return false;
+		end if;
+
+		i:=i+1;
+	end while;
+		
+	return true;
+
+end function;
+
+
+function halve(a)
+	
+	a:=a/2;
+	a:=Round(a);
+	return a;
+
+end function;
+
+
+function SequenceToTuple(lis)
+
+	if Type(lis) ne SeqEnum then
+
+		error "Error: input should be a sequence.";
+	end if;
+
+	len:=#lis;
+
+	A:=<>;  //output
+
+	count:=1;
+
+	while count le len do
+
+		Append(~A,lis[count]);
+		count:= count +1;
+
+	end while;
+
+	return A;
+
+
+end function;
+
+
+
+function TupleToSequence(t)
+
+	if Type(t) ne Tup then
+		error "Error: input should be a tuple.";
+	end if;
+
+	len:=#t;
+
+	A:=[];
+
+	for i in [1..len] do
+ 
+		A[i]:=t[i];
+	end for;
+
+	return A;
+
+end function;
+
+
+
+function Number_Of_Segments(phi)
+
+	K:=CoefficientRing(phi);		
+	Zp:=BaseRing(K);
+
+	n:=Degree(phi);
+	p:=Prime(PrimeRing(K));
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	Lx<x>:=PolynomialRing(L);
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n);
+	rho:=Lx!rho;
+
+	ramification_polygon := NewtonPolygon(rho);
+	vertices := LowerVertices(ramification_polygon);	
+	slopes := Slopes(ramification_polygon)[1..#vertices-1]; 
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	return #slopes;
+
+end function;
+
+
+
+function StemField(phi)
+
+	Qp:=CoefficientRing(phi);
+
+	if IsInertial(phi) then
+		K:=ext<Qp|phi>;
+	elif IsEisenstein(phi) then
+		K:=ext<Qp|phi>;
+	else
+		_,_,m:=Factorization(phi:Extensions:=true);
+		K:=m[1]`Extension;
+
+		psi:=DefiningPolynomial(K);
+		psi:=reduce_poly(psi);
+
+		U:=BaseRing(K);
+		ChangePrecision(~psi,Precision(U));
+
+		KK:=ext<U|psi>;
+		return KK;
+	end if;
+
+	return K;
+
+end function;
+
+
+
+function GroupParity(G)
+ 
+   if G subset AlternatingGroup(Degree(G)) then
+     return 1;
+   else 
+     return -1;
+   end if;
+
+end function;
+
+
+function SegmentOrderSieve(candidates,order,p)
+
+	Latest_candidates:=[];
+	fin:=#candidates[1];
+
+	for j in [1..#candidates] do
+		G:=candidates[j][fin];
+		LL:=LowIndexSubgroups(G,<order,order>);
+
+		if #LL gt 0 then
+			for L in LL do
+				if (Exponent(quo<G|L>) eq p) and IsElementaryAbelian(quo<G|L>) then
+					Append(~Latest_candidates,Append(candidates[j],L));
+				end if;
+			end for;
+		end if;
+	end for;
+
+	return Latest_candidates;
+
+
+end function;
+
+
+function PolynomialParity(phi)
+
+	discc:=Discriminant(phi);
+
+	if IsSquare(discc) then
+		return 1;
+	else
+		return -1;
+	end if;
+
+end function;
+
+
+function LowDegreeResolventTest(G,p)
+
+	if p in {2,3,5} then
+		return true;
+	end if;
+
+	if IsSolvable(G) eq false then
+		error "Error:  Group G is not solvable";
+	end if;
+
+	Q:=PrimesInInterval(3,p-1);	//Possible primes
+
+	for q in Q do
+		if IsDivisibleBy(p-1,q) then
+
+			H:=LowIndexSubgroups(G,<q,q>);
+				for h in H do
+					// _,g,_:=CosetAction(G,h);
+					g:=CosetImage(G,h);
+
+					state:=IsCyclic(g);
+					
+					if state eq false then
+						return false;
+					end if;
+
+				end for;
+
+		end if;
+
+	end for;
+
+	return true;
+
+end function;
+
+
+function Possible_Inertia(G,e0,p,f)
+
+//Note:  remove condition c lt Degree(G) when you make this faster.
+
+	choices:=[];
+
+	remain:=Order(G) div e0;    //Remove |G0:G1| from picture
+	remain:=Integers()!remain;
+
+	highestpow:=Valuation(remain,p);
+
+	lowestinertia:= remain div (p^(highestpow)); 
+	lowestinertia:= Integers()!lowestinertia;
+
+	for i in [0..highestpow] do
+		temp:=lowestinertia * p^i ;
+		Append(~choices,temp);
+	end for;
+
+	final_choices:=[c: c in choices | IsDivisibleBy(c, f) and c lt Degree(G)];
+
+	return final_choices;
+
+
+end function;
+
+
+function Ramification_Segments(stem)
+
+
+	if IsThereaU(stem) eq true then   //mixed case.  Stem field is totally ramified extension over unramified extension
+
+		psi:=DefiningPolynomial(stem); //Eisenstein
+		U:=BaseRing(stem);
+		zp:=PrimeRing(stem);
+
+		Qp:=pAdicField(Prime(zp),Precision(zp));
+		UU := UnramifiedExtension(Qp,Polynomial(Qp,DefiningPolynomial(U)));  
+		Coeff:=Coefficients(psi);
+		n:=Degree(psi);
+
+		
+		tau:=map<U->UU|x:->&+[(UU.1)^(i-1)*Coefficient(x,i): i in [1..Degree(U)]]>;
+		Ux<x>:=PolynomialRing(UU);
+
+		phi:=Polynomial(Ux,[&+[tau(Coeff[i])*x^(i-1): i in [1..(n+1)]]]);
+		phi:=Ux!phi;
+
+
+
+	else		//stem field is just totally ramified extension generated by eisenstein poly.
+
+ 
+		psi:=DefiningPolynomial(stem);  //Eisenstein
+		zp:=BaseRing(stem);
+
+		Qp:=pAdicField(Prime(zp),Precision(zp));
+		Qx<x>:=PolynomialRing(Qp);
+		phi:=Qx!psi;
+
+	end if;
+
+	RR:=RamificationPolygonTower(phi);
+	R:=[];			//what's to be returned.
+
+	for i in [1..#RR] do
+		R[i]:=RingOfIntegers(RR[i]);
+	end for;
+
+	//Reduce defining polynomial of top extension.
+	
+	RL:=R[#R];
+
+	V:=BaseRing(RL);
+	tau:=DefiningPolynomial(RL);
+	tau:=reduce_poly(tau);
+
+	ChangePrecision(~tau,Precision(V));
+	R[#R]:=ext<V|tau>;
+
+	return R;
+
+end function;
+
+
+
+function MultiSolvable(n,p)
+
+    t := TransitiveGroups(n);
+    sol := [a : a in t|IsSolvable(a)];
+    // solvable transitive groups of degree n
+
+    s:=[b: b in sol|LowDegreeResolventTest(b,p)];
+
+
+    l := [LowIndexSubgroups(a,<1,n>):a in s];
+    // subgroups of index 1 to n.  Maybe do 2 to n.  
+ 
+
+    candidates := []; // possible Galois groups
+    for i in [1..#l] do
+          "\n#G",#s[i];
+
+          for g0 in l[i] do
+                if IsNormal(s[i],g0) and IsCyclic(quo<s[i]|g0>) then
+                      g0index := Index(s[i],g0);
+                          if true then
+                            "  [G:G0]",g0index;
+                            G0:= g0;
+                            lg0 := LowIndexSubgroups(g0,<1,p^g0index-1>);
+                           
+                        for h in lg0 do
+                                  //"[G0:G1]",Index(g0,h);
+                                      if IsCyclic(quo<g0|h>) and (p^g0index-1) mod Index(g0,h) eq 0 then
+                                            if IsNormal(s[i],h) and IspGroup(h,p) then   //Last one not included in Brown paper nor awtrey one.  Not needed since subgroup of solvable group is solvable.
+                                              "    [G0:G1]",Index(g0,h);
+                                              G1:= h;
+                                              Append(~candidates,<s[i],G0,G1>);
+                                              "    #candidates",#candidates;
+                                        end if;
+                                end if;
+                        end for;
+                    end if;
+            end if;        
+        end for;
+    end for;
+
+    return candidates;
+
+
+end function;
+
+
+function StemFieldStartingGroup(stem)
+
+	prod:=Sym(1);	//initial factor
+
+	RR:=Ramification_Segments(stem);
+	L:=RR[#RR];	//tower of subfields of eisenstein part of stem field. 
+	
+	WreathFactors:=[]; 
+
+	//when doing loop on L...compare L to bottom of tower.
+
+	while L ne PrimeRing(L) do
+				
+		if IsWildlyRamified(L) then
+			
+			f:=DefiningPolynomial(L);
+			temp:=One_Segment(f);
+			L:=BaseRing(L);
+
+		else
+			temp:=TameGaloisGroup(L);
+			L:=PrimeRing(L);
+
+		end if;
+			
+		Append(~WreathFactors,temp);
+				
+	end while;
+
+	WreathFactors:=Reverse(WreathFactors);
+
+	for i in [1..#WreathFactors] do
+		Factt:=WreathFactors[i];
+		prod:=WreathProduct(Factt,prod);
+	end for;
+
+	return prod;
+
+end function;
+
+
+function StartingTransitiveGroups(stem)
+
+	G:=StemFieldStartingGroup(stem);
+	Can:=Subgroups(G:IsTransitive:=true);
+
+	C:=[r`subgroup: r in Can];
+	C:=CandidateClasses(C);
+
+	return Keys(C);
+
+end function;
+
+
+
+function Galois_Starting_Group(phi)
+
+	stem:=StemField(phi);
+	
+	return StemFieldStartingGroup(stem);
+
+end function;
+
+
+
+function StartingGroupTest(phi,Candidate_number)
+
+	if IsInertial(phi) then
+
+		return 	Candidate_number eq 1;	
+
+	end if;
+
+	stem:=StemField(phi);
+	T:=StartingTransitiveGroups(stem);
+
+	Candidates:=[TransitiveGroupIdentification(t): t in T];
+
+	bool:=Candidate_number in Candidates;
+
+	return bool;
+
+end function;
+
+
+function CorrectE(phi)
+
+
+	//Recovering e0
+	K:=CoefficientRing(phi);
+	n:=Degree(phi);
+	p:=Prime(PrimeRing(K));
+	w:=Valuation(n,p);
+	e0:=n div p^w;
+	e0:=Integers()!e0;
+
+
+	//Create Ramfication Polygon
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	Lx<x>:=PolynomialRing(L);
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n);
+	rho:=Lx!rho;
+
+	ramification_polygon := NewtonPolygon(rho);
+	vertices := LowerVertices(ramification_polygon);	
+	slopes := Slopes(ramification_polygon)[1..#vertices-1]; 
+	
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+	
+	//Find rest of e_i's
+
+	if e0 eq 1 then
+		l:=#slopes;
+	else  //e0>1
+		l:=#slopes-1;		//l+1 st segment is horizontal on x-axis
+	end if;
+
+	m:=slopes;			//list of slopes
+
+	e:=[];
+
+	for i in [1..#slopes] do
+		e[i]:=Denominator(-m[i]);		//list of (negative) slope denominators
+	end for;
+
+	e:=e[1..l];
+
+	return (e0*LCM(e)), vertices, slopes;
+
+
+end function;
+
+
+
+function Max_Tame_Test(Candidate, TameGrp, phi)
+
+	if IsEisenstein(phi) eq false then
+		error "Polynomial is not Eisenstein.";
+	end if;
+
+
+	if Degree(Candidate) ne Degree(phi) then
+		error "You didn't use regular representation";
+	end if;
+
+	PP:=TameGrp;
+	Zp:=PrimeRing(CoefficientRing(phi));
+	p:=Prime(Zp);
+
+	if Order(TameGrp) eq 1 then
+		return IspGroup(Candidate,p);
+	end if;	
+
+	ord:=Order(PP);
+
+	Pos:=LowIndexSubgroups(Candidate,<ord,ord>);
+
+	if IsEmpty(Pos) then 
+		return false, [0];
+	end if;
+
+	B:=[];  //holds the possible subgroups S if any.
+
+	for S in Pos do 
+		bool:=IsIsomorphic(PP, quo<Candidate|S>) and IsNormal(Candidate,S) and IspGroup(S,p);
+
+		if bool then
+			Append(~B,S);
+		end if;
+	end for;
+
+	if #B gt 0 then
+		return true, B;
+	else
+		return false, [0];
+	end if;
+
+	return 0;
+
+end function;
+
+
+
+function GrieveSieve(phi)
+
+	n:=Degree(phi);
+
+	if IsInertial(phi) then
+		return {TransitiveGroupIdentification(CyclicGroup(n))};
+	end if;
+
+	Qp:=CoefficientRing(phi);
+	p:=Prime(Qp);
+	purity:=1;  //if stays 1 then the polynomial is either eisenstein or inertial
+
+
+	if Valuation(n,p) eq 0 then
+
+		TameGrp:=TameGaloisGroup(StemField(phi));
+		return {TransitiveGroupIdentification(TameGrp)};
+	end if;
+
+
+	if n eq p then
+		phi:=MakeEisenstein(phi);
+		Galgrp:=One_Segment(phi);
+		return {TransitiveGroupIdentification(Galgrp)};
+	end if;
+
+
+	if IsEisenstein(phi) then
+		K:=ext<Qp|phi>;
+			if (Number_Of_Segments(phi) eq 1) and (n eq (p^(Valuation(n,p)))) then
+				Galgrp:=One_Segment(phi);
+				return {TransitiveGroupIdentification(Galgrp)};
+			end if;
+	 
+	else
+		_,_,ext:=Factorization(phi:Extensions:=true);
+		K:=ext[1]`Extension;   //new_phi for the Max Tame?
+		purity:=0;
+	
+	end if;
+
+
+	if Valuation(Degree(DefiningPolynomial(K)),p) eq 0 then
+		TameGrp:=TameGaloisGroup(K);
+		return {TransitiveGroupIdentification(TameGrp)};
+	end if;
+		
+
+	Autoo:=AutomorphismGroup(K,Qp);
+
+	if Order(Autoo) eq n then
+		return {TransitiveGroupIdentification(Autoo)};  //We are in the normal case here.
+		
+	end if;
+
+	t := StartingTransitiveGroups(K);
+	//t := TransitiveGroups(n);
+	
+	sol:=[k: k in t|(Order(k) gt n)];  //Remove groups of order n.
+	m:=[b: b in sol|LowDegreeResolventTest(b,p)];
+	//m:=sol;
+	
+	PParity:=PolynomialParity(phi);
+
+	S:=[];
+
+	for i in [1..#m] do
+		G:=m[i];
+		Cen:=Centralizer(Sym(n),G);
+	
+		if (PParity eq GroupParity(G)) and IsIsomorphic(Autoo,Cen) then
+			Append(~S,G);
+		end if;
+
+	end for;
+
+	if Only_One(S) then
+		return {TransitiveGroupIdentification(S[1])};
+	end if;
+	
+		
+	if purity eq 0 then
+		phi:=DefiningPolynomial(K);
+		n:=Degree(phi);
+	end if;
+
+	_,vertices,slopess:=CorrectE(phi);
+	T:=Max_Tame_Subextension(phi);
+	e0:=RamificationIndex(T, PrimeRing(T));
+	f:=InertiaDegree(T,PrimeRing(T));
+
+	l:=[];
+
+	for j in [1..#S]  do 	//loop over S add things to l one at a time
+		G:=S[j];
+		Possiblef:=Possible_Inertia(G,e0,p,f);
+	
+		l[j]:=Flat([[LowIndexSubgroups(G,<Possiblef[i],Possiblef[i]>): i in [1..#Possiblef]]]);
+	end for;
+	
+
+	candidates := []; // possible Galois groups
+		
+	for i in [1..#l] do
+ 		"\n#G",#S[i];
+
+	          for g0 in l[i] do
+               		if IsNormal(S[i],g0) and IsCyclic(quo<S[i]|g0>) then
+               			g0index := Index(S[i],g0);
+                       			if true then
+                       				"  [G:G0]",g0index;
+                       				G0:= g0;
+                       				lg0 := LowIndexSubgroups(g0,<e0,e0>);
+                       				for h in lg0 do
+                               				//"[G0:G1]",Index(g0,h);
+                               				if IsCyclic(quo<g0|h>) and (p^g0index-1) mod Index(g0,h) eq 0 and (p^g0index-1) ge e0 then
+                                       				if IsNormal(S[i],h) and IspGroup(h,p) then   //Last one not included in Brown paper nor awtrey one.  Not needed since subgroup of solvable group is solvable.
+                                       					"    [G0:G1]",Index(g0,h);
+                                       					G1:= h;
+                                       					Append(~candidates,<S[i],G0,G1>);
+                                       					"    #candidates",#candidates;
+                                       				end if;
+                               				end if;
+                       				end for;
+               				end if;
+        		end if;        
+        	end for;
+    	end for;
+
+
+	New_candidates:=candidates;
+	
+
+	MainGroups:=Setseq({New_candidates[i][1]: i in [1..#New_candidates]});  //kill redundancy in G.
+
+	if Only_One(MainGroups) then
+		return {TransitiveGroupIdentification(r): r in MainGroups};
+	end if;
+
+
+	//Now need to incorporate the elementary abelian extensions from x-coordinates of Ramification Polygon.
+
+	state:=false;
+
+	while state eq false do
+	
+		if Reverse(vertices)[1][1] gt p^(Valuation(n,p)) then 	//have a horizontal segment 
+			vertices:=vertices[1..(#vertices-1)];  		// remove last vertex
+		end if;
+
+		state:=(Reverse(vertices)[1][1] eq p^(Valuation(n,p)));
+	end while;
+
+
+	count:=#vertices;
+
+	segmentorders:=[]; //will hold the degrees of the extensions.
+
+	if count eq 1 then   //no non-horizontal segments, no help here.  For now just return answers so far.  Will need to be fixed later.
+		return {TransitiveGroupIdentification(r): r in MainGroups};
+
+	else 	while count gt 1 do
+			current:=vertices[count][1]/vertices[count-1][1];
+			current:=Integers()!current;
+			Append(~segmentorders,current);
+			count:=count-1;
+		end while;
+	end if;
+
+
+	for i in [1..#segmentorders] do
+
+		New_candidates:=SegmentOrderSieve(New_candidates, segmentorders[i],p);
+
+		if IsEmpty(New_candidates) then
+			return {TransitiveGroupIdentification(r): r in MainGroups};
+		end if;
+
+		ans:=Setseq({New_candidates[i][1]: i in [1..#New_candidates]});
+		ret:={TransitiveGroupIdentification(r): r in ans};
+
+		if #ret eq 1 then
+
+			return ret;
+		end if;
+	end for;
+
+	MainGroups:=Setseq({New_candidates[i][1]: i in [1..#New_candidates]});  
+
+	if Only_One(MainGroups) then
+		return {TransitiveGroupIdentification(r): r in MainGroups};
+	end if;
+
+	//If Eisenstein use Max_Tame_Test(Candidate, TameGrp, phi)
+	
+	if purity eq 1 then
+		TameGrp:=TameGaloisGroup(T);
+		"burp";
+		UptoTame:=[m: m in MainGroups|Max_Tame_Test(m,TameGrp, phi)];
+		MainGroups:=Set(UptoTame);
+	end if;			
+	 
+	return {TransitiveGroupIdentification(r): r in MainGroups};	
+
+end function;
+
+
+function RecoverSlopes(phi)
+
+	if IsInertial(phi) then
+		return 0;
+	end if;
+
+	if IsEisenstein(phi) eq false then
+		_,_,m:=Factorization(phi:Extensions:=true);
+		K:=m[1]`Extension;
+		phi:=DefiningPolynomial(K);
+	end if;
+		
+
+	//Recovering e0
+	K:=CoefficientRing(phi);
+	n:=Degree(phi);
+	p:=Prime(PrimeRing(K));
+	w:=Valuation(n,p);
+	e0:=n div p^w;
+	e0:=Integers()!e0;
+
+
+	//Create Ramfication Polygon
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	Lx<x>:=PolynomialRing(L);
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n);
+	rho:=Lx!rho;
+
+	ramification_polygon := NewtonPolygon(rho);
+	vertices := LowerVertices(ramification_polygon);	
+	slopes := Slopes(ramification_polygon)[1..#vertices-1]; 
+	
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+	
+	return slopes,vertices;
+
+end function;
+
+
+function S2Resolvent(f)
+
+	//Computes the Resultant (f(y), f(x+y))/x^n.  Resultant done in the variable y.  Last, halve the exponents.
+
+	Z:=Integers();
+	Zw<w>:=PolynomialRing(Z);
+	f:=Zw!f;
+
+	R:=CoefficientRing(f);
+	n:=Degree(f);
+	Rxy<x,y>:=PolynomialRing(R,2);
+
+	f1:=Evaluate(f,y);
+	f1:=Rxy!f1;
+
+	f2:=Evaluate(f,x+y);
+	f2:=Rxy!f2;
+
+	Res:=Resultant(f1,f2,y);
+	Res:=UnivariatePolynomial(Res);
+
+	Res:= Res div UnivariatePolynomial(x^n);  //Fine to here
+
+	deg:=Degree(Res);
+	Coeff:= Coefficients(Res);
+
+	Rx<x>:=PolynomialRing(R);
+	temp:=&+[Coeff[i]*(x)^(halve(i-1)): i in [1..(deg+1)]];
+	Res:=Rx!temp;
+
+	return Res;
+
+end function;
+
+
+
+function  S2_OrbitLengthTest(G,phi,ResolventFactorList)
+
+	//G is a candidate
+
+	n:=Degree(phi);
+	Sn:=Sym(n);
+
+	H:=DirectProduct(Sym(2),Sym(n-2));
+	m:=Order(Sn)/Order(H);
+	m:=Integers()!m;
+
+	a,b,c:=CosetAction(Sn,H);
+
+	phi_G:=a(G);
+
+	Orbb:=Orbits(phi_G);
+	Orb_lengths:=[#r: r in Orbb];
+	
+	Orb_lengths:=Set(tally(Orb_lengths));
+
+	return Orb_lengths eq ResolventFactorList;
+
+
+end function;
+
+
+function PossibleGalois(phi)
+
+	Candidates:=GrieveSieve(phi);
+	
+	if #Candidates eq 1 then
+		return Candidates;
+	end if;
+
+	Candidates:={TransitiveGroup(Degree(phi),c): c in Candidates};
+
+	K:=CoefficientRing(phi);	
+
+	psi:=S2Resolvent(phi);
+
+	state:=IsitSquareFree(psi);
+
+	while (state eq false) do
+		phi:=Tschirnhausen(phi);
+		psi:=S2Resolvent(phi);
+		state:=IsitSquareFree(psi);
+
+	end while;
+
+	p:=Prime(K);
+	FF:=pFactorDegrees(p,psi);
+	S2ResolventFactorList:=Set(tally(FF));
+
+	New_Candidates:=[G: G in Candidates |S2_OrbitLengthTest(G,phi,S2ResolventFactorList)];
+
+	WhatRemains:={TransitiveGroupIdentification(r): r in New_Candidates};
+
+	return WhatRemains; 
+
+end function;
+
+
+
+//Stuff for confirming sinclair.
+
+function My_RamificationPolygon(phi)
+
+	if IsEisenstein(phi) eq false then
+		error "Polynomial is not Eisenstein.";
+	end if;
+
+	K:=CoefficientRing(phi);		
+	
+	n:=Degree(phi);
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	Lx<x>:=PolynomialRing(L);
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n); //Ramification Polynomial
+	rho:=Lx!rho;
+	ChangePrecision(~rho,Precision(L));
+
+	ramification_polygon := NewtonPolygon(rho);
+
+	return ramification_polygon,rho;  
+
+end function;
+
+
+function Recover_Vertices_Slopes(ramification_polygon)
+
+	vertices := LowerVertices(ramification_polygon);	
+	slopes := Slopes(ramification_polygon)[1..#vertices-1];
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	return vertices, slopes;
+
+end function;
+
+
+function RecoverPolyDegree(lis)
+	//Uses the ramification polygon's vertices to recover the degree of the polynomial.
+
+	vertices:=lis;
+	a:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+
+	return Integers()!Max(a);
+
+end function;
+
+
+
+function RecoverDiscriminant(lis)
+	//recover discriminant's valuation from first vertex of polygon given as list of vertices
+
+	if lis[1][1] eq 0 then
+		lis:=lis[2..#lis];		//get rid of point with x-coordinate=0
+	end if;
+
+	if lis[1][1] ne 1 then
+		error "Error: polygon doesn't have a vertex with x-coordinate 1.";
+	end if;
+
+	j:=lis[1][2];
+	n:=RecoverPolyDegree(lis);
+
+
+	return n+j -1;
+
+end function;
+

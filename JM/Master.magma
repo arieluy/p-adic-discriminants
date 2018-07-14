@@ -1,0 +1,54 @@
+// uses verbose level GaloisTower
+
+Attach("JM/montes.m");
+
+load "JM/Grieve.magma";
+
+load "JM/AbsoluteResolvents.magma";
+
+load "JM/Brown.magma";
+
+load "JM/AMP-Resolvent.magma";
+
+load "JM/LastResort.magma";  //complex resolvent stuff
+
+load "JM/AMP.magma";
+
+load "JM/Sinclair.magma";
+
+
+
+function CompleteTime(t)
+
+
+	dayq:=t div 86400;
+	dayr:=t -86400*dayq;
+
+	hourq:= dayr div 3600;
+	hourr:=dayr - 3600*hourq;
+
+	minq:=hourr div 60;
+	minr:=hourr-60*minq;
+
+	return dayq, "Days", hourq, "Hours", minq, "Minutes", minr, "Seconds";
+
+end function;
+
+
+
+function MyPoliFact(phi)
+
+	//Return the exact factors of phi over its stem field L.	
+
+	K:=CoefficientRing(phi);
+	L:=ext<K|phi>; //StemField
+	Ly<y>:=PolynomialRing(L);
+
+	phi:=Ly!phi;
+
+	FF:=Factorization(phi);
+	F:=[f[1]: f in FF];		//Don't need the multiplicities.
+
+	return F;
+
+end function;

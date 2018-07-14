@@ -1,0 +1,1069 @@
+function LowIndexResolvent(phi,Candidates)
+   
+    MaxIndex := 1000;
+    C := Candidates;
+"C",[TransitiveGroupIdentification(c):c in C];
+    Z := Integers();
+    n := Degree(phi);
+    Qpx<x> := Parent(phi);
+    Qp := CoefficientRing(Qpx);
+    p := Prime(Qp);
+    Sn := Sym(n);
+    alpha := pAdicRoot_Approx(phi,1000);
+    //alpha := MyComplexRootss(phi,1000);
+    Qq:=Parent(alpha[1]);
+    q:=Prime(Qq);
+    Qqz<z> := PolynomialRing(Qq);
+//"q",q;
+    M := FujiwaraBound(Polynomial(Z,phi)); 
+       
+    MSG := MaximalSubgroups(Sn);
+    MSG := [s:s in MSG|#Sn/#(s`subgroup) lt MaxIndex];
+"#MSG",#MSG;
+    while #MSG gt 0 do   
+      for s in MSG do
+        S := s`subgroup;
+        //S := RandomSubgroup(Sn,C[2],C[1]);
+        if NeedResolvent(Sn,S,C) then
+           N:=Bound(GaloisGroupInvariant(Sn,S),Abs(M));  //to be modified later
+           k:=400*Ceiling(Log(q,2*N+1) +1);
+           ChangePrecision(~Qq,k);
+"q-Precision",k;
+           Qqz<z>:=PolynomialRing(Qq);
+
+           phiZ := Polynomial(Z,phi);
+           beta := lift_roots(phiZ,alpha,k);
+"Relative Invariant";
+           F:=RelativeInvariant(Sn,S);
+/* 
+        "Verify Invariant";
+        if VerifyInvariant(F,Sn,S) then
+                "Invariant PASSES";
+        else
+                "Invariant FAILS";
+        end if;
+*/
+           CReps:=RightTransversal(Sn,S);
+
+"Resolvent";
+           ResolventFactors:=[];
+           for sigma in CReps do
+                Cons:=Evaluate(F^(sigma),beta);
+                Append(~ResolventFactors,z - Qq!Cons);
+           end for;
+"Multiplying";
+           Res:=&*ResolventFactors;
+           Res:=Qqz!Res;
+
+"Back to Qp";
+           modulus := q^Precision(Qp);
+	   coeff := [];	
+           for j in [0..(Degree(Res))] do
+                //Coefficient(Res,j);
+                a := Z!Coefficient(Res,j);
+                //a := Round(Real(Coefficient(Res,j)));
+                if a lt (modulus div 2) then
+                        coeff[j+1]:=a;
+                else
+                        coeff[j+1]:=a-modulus;
+                end if;
+          end for;
+
+          RF:=Polynomial(Z,coeff);
+          ResolventFactorList := Set(tally(pFactorDegrees(p,RF)));
+"ResolventFactorList", ResolventFactorList;
+          C:=[G: G in C | Resolvent_OrbitLengthTest(Sn,G,S,ResolventFactorList) ];
+"C",[TransitiveGroupIdentification(c):c in C];
+       if #C eq 1 then
+          return C;
+       end if;
+       end if;
+    end for;
+    MSG := Flat([MaximalSubgroups(s`subgroup):s in MSG]);
+    MSG := [s:s in MSG|#Sn/#(s`subgroup) lt MaxIndex];
+    end while;
+    
+
+    return C;
+end function;
+
+
+
+
+function TL_Auto(T,phi)
+
+	Qp:=CoefficientRing(phi);
+	n:=Degree(phi);
+
+	if Degree(DefiningPolynomial(T)) eq 1 then
+		T:=BaseRing(T);
+	end if;
+
+	if Degree(T,Qp) eq 1 then
+		T:=Qp;
+	end if;
+
+	Ty<y>:=PolynomialRing(T);
+	phi:=Ty!phi;	
+
+	_, _, F:=Factorization(phi:Extensions:=true);
+	TL0:=F[1]`Extension;
+
+	if RamificationIndex(BaseRing(TL0)) gt 1 then
+		V:=BaseRing(BaseRing(TL0));
+
+		omicron:=Norm(DefiningPolynomial(TL0)); 
+
+		if IsEisenstein(omicron) then
+			omicron:=reduce_poly(omicron);
+			ChangePrecision(~omicron,Precision(V));
+		end if;
+
+		A:=AutomorphismGroup(ext<V|omicron>,Qp);
+	else
+		A:=AutomorphismGroup(TL0,Qp);
+	end if;
+
+	return A;
+
+end function;
+
+
+function PossibleB1(Candidate,GalT1)
+
+//Test whether there is a normal subgroup B1 of Candidate so that the quotient group is Isomorphic to Gal(T1/K).  If so, returns possible B1.
+
+	H:=Candidate;
+	
+	ord:=Order(GalT1);
+	Pos:=LowIndexSubgroups(H,<ord,ord>);
+
+	if IsEmpty(Pos) then
+		return false, [0];
+	end if;
+	
+	B:=[];  //holds the possible subgroups B1 if any.
+
+	for BB in Pos do
+		bool:=IsIsomorphic(quo<H|BB>,GalT1) and IsNormal(H,BB);
+		if bool then
+			Append(~B,BB);
+		end if;
+	end for;
+
+	if #B gt 0 then
+		return true, B;
+	else
+		return false, [0];
+	end if;
+
+	return 0;
+
+end function;
+
+
+
+function PossibleD(Candidate,DL1,Gal1)
+
+//Test whether: 1. there is a subgroup D1 of Candidate so that [Candidate:D1] = [L1:K].
+//		2. there is a normal subgroup D0 of D1 so that D1/D0 is iso to Gal(L0,L1) = Gal1
+
+
+//If true, output set {<D1,[D0]>} where [D0] is a list.
+
+//Notation:  DL1 is Degree(L1,K).
+
+
+	H:=Candidate;
+
+	Ord:=DL1;
+
+	D1:=LowIndexSubgroups(H,<Ord,Ord>);  //Possible D1
+
+	if IsEmpty(D1) then
+		return false, [0];
+	end if;
+	
+	D_tuples:={};
+
+	for d1 in D1 do
+
+		Pos:=LowIndexSubgroups(d1,<Order(Gal1),Order(Gal1)>);
+		d0list:=[];
+		for d0 in Pos do
+
+			bool:=IsIsomorphic(Gal1, quo<d1|d0>);
+
+			if bool then
+				Append(~d0list,d0);
+			end if;
+
+		end for;
+
+		if #d0list gt 0 then 
+			D_tuples:=D_tuples join {<d1,d0list>};
+		end if;
+
+	end for;
+
+
+	if IsEmpty(D_tuples) then
+		return false, [0];
+	end if;
+
+	return true, D_tuples;
+
+
+end function; 
+
+
+
+
+function AMP_Max_Tame_Test(Candidate, TameGrp, p, B1)
+
+	PP:=TameGrp;
+	
+	if Order(TameGrp) eq 1 then
+		state:= IspGroup(Candidate,p);
+
+		if state eq false then
+			return false, [0];
+		end if;
+
+	end if;	
+
+
+	ord:=Order(PP);
+
+	Pos:=LowIndexSubgroups(Candidate,<ord,ord>);
+
+	if IsEmpty(Pos) then 
+		return false, [0];
+	end if;
+
+	B:=[];  //holds the possible subgroups S if any.
+
+	for S in Pos do 
+		bool:=IsIsomorphic(PP, quo<Candidate|S>) and IsNormal(Candidate,S) and IspGroup(S,p) and (S subset B1);
+
+		if bool then
+
+			if IsNormal(B1,S) then
+				Append(~B,S);
+			end if;
+		end if;
+	end for;
+
+	if #B gt 0 then
+		return true, B;
+	else
+		return false, [];
+	end if;
+
+	return 0;
+
+end function;
+
+
+
+function PrevNormalTest(Candidate,N1,B1)
+
+//Let N1 be Gal(L1/K), Candidate a possible Gal Grp.
+//Test whether there is a normal subgroup U of Candidate so that Candidate/U is isomorphic to N1.  Also make sure U is a normal subgroup of B1
+
+//Output:  first a boolean value for whether the candidate passes.  If it passes (true) then the second output is the list of possible U.
+
+	H:=Candidate;
+	ord:=Order(N1);
+	Pos:=LowIndexSubgroups(H,<ord,ord>);
+
+	if IsEmpty(Pos) then
+		return false, [0];
+	end if;
+
+	B:=[];  //holds the possible subgroups U if any.
+
+	for U in Pos do
+		bool:=IsIsomorphic(quo<H|U>,N1 ) and IsNormal(H,U) and (U subset B1);
+
+		if bool then
+
+			if IsNormal(B1,U) then
+				Append(~B,U);
+			end if;
+		end if;
+	end for;
+
+	if #B gt 0 then
+		return true, B;
+	else
+		return false, [0];
+	end if;
+
+	return 0;
+
+end function;
+
+
+function PossibleCandidateOrders(N1,s1,T,T1,DL1)
+	//DL1 is Degree(L1,K).
+
+        Ord:=[];   //Possible Group orders.  The output of the function
+
+//First find possible upper bound on w.
+        K:=PrimeRing(T1);
+// L1: extensions corresponding to first segment
+// N1: normal closure of L1
+// T1: max tame sub ext of N1
+// N: normal closure
+// T: max tame sub ext of N
+//"[N1:K]",Order(N1);
+//"[T1:K]",Degree(T1,K);
+//"[L1:K]",DL1;
+//"[T:K]",Degree(T,K);
+//"[T:T1]",Degree(T,K)/Degree(T1,K);
+	p:=Prime(K);
+	temp:=Lcm(Order(N1),Degree(T,K));
+        tamemult:=Integers()!(Order(N1)/Degree(T1,K))*Integers()!(Degree(T,K)/Degree(T1,K));
+        wildbase:=p;
+        stemtame := DL1/p^Valuation(DL1,p);
+        wildexps:=[0..Integers()!(Order(N1)/Degree(T1,K))*s1*stemtame];
+//"wildexps",wildexps;
+	for w in wildexps do
+          for t in Divisors(tamemult) do
+		finall:=temp * wildbase^w *t;
+		finall:=Integers()!finall;
+		Append(~Ord,finall);
+          end for;
+	end for;
+vprint GaloisTower,2: "Possible Orders",Set(Ord);
+	return Ord;
+
+end function;
+
+
+function TwoSegmentStartingGroup(L1,L0,Prev_Grp)
+
+//Prev_Grp is Gal(L1/K) if this isn't the first iteration.  Otherwise it is the trivial group.
+
+//Output:  W=Starting Group as a wreath product
+	 //N1 = Gal(L1/K)
+	 //WreathBlocks
+	//Gal1 is Gal(L0/L1)
+
+	if Order(Prev_Grp) gt 1 then
+		N1:=Prev_Grp;
+	else
+		if IsWildlyRamified(L1) then
+			N1:=One_Segment(DefiningPolynomial(L1));
+		else
+			N1:=TameGaloisGroup(L1);
+		end if;
+	end if;
+
+	if IsWildlyRamified(L0) then
+		Gal1:=One_Segment(DefiningPolynomial(L0));
+	else
+		Gal1:=TameGaloisGroup(L0);
+	end if;
+
+vprint GaloisTower,2: "Gal(L0/L1)",Gal1;
+vprint GaloisTower,2: "Gal(L1/K)",N1," = ",Degree(N1),"T",TransitiveGroupIdentification(N1);
+
+	W:=WreathProduct(Gal1,N1);
+vprint GaloisTower,3: "Gal(L0/K) is a subgroup of a group of order",#W,":",W;	
+	ba, im, ker:=BlocksAction(W,{1..Degree(Gal1)});
+	WreathBlocks:=Orbits(ker);
+
+	WreathBlocks:=Set(WreathBlocks);
+	WreathBlocks:={Set(w): w in WreathBlocks};
+
+	return W, N1, WreathBlocks,Gal1;
+
+
+end function;
+
+
+function Two_Segments_Filtering(phi,L1, L0, Prev_Grp, T,T1)
+
+	Num_Remaining:=[];
+	
+	Qp:=CoefficientRing(phi);
+	p:=Prime(Qp);
+
+	n:=Degree(phi);
+	K:=CoefficientRing(phi);
+
+	W, N1, WreathBlocks,Gal1:=TwoSegmentStartingGroup(L1,L0,Prev_Grp);
+
+	s1:=Valuation(Degree(DefiningPolynomial(L0)),p);
+	DL1:=Degree(L1,K);
+	Pos_Order:=PossibleCandidateOrders(N1,s1,T,T1,DL1);
+
+	if n lt 16 then
+		Can:=Subgroups(W:IsTransitive:=true);
+		C:=[r`subgroup: r in Can];
+		InitialCandidates:=CandidateClasses(C);  //associative array
+
+		First:=Keys(InitialCandidates);
+		Num_Remaining[1]:=#First;
+
+		Second:=[c: c in First| Order(c) in Pos_Order];
+		Num_Remaining[2]:=#Second;
+
+	else 
+
+		min_order:=Min(Pos_Order);
+		max_order:=Max(Pos_Order); //Use list of possible orders to set parameters for calculating initial group candidates as subgroups of W.
+
+		max_order:=Min(max_order,Order(W));  //Need to limit ourselves to size of W.
+
+		Can:=Subgroups(W:IsTransitive:=true, OrderMultipleOf:=min_order, OrderDividing:=max_order );
+		C:=[r`subgroup: r in Can];
+		InitialCandidates:=CandidateClasses(C);  //associative array
+
+		First:=Keys(InitialCandidates);
+		Num_Remaining[1]:=#First;
+
+		Second:=First;
+		Num_Remaining[2]:=#Second;
+		
+	end if;
+vprint GaloisTower,2: "Filtering 2: Possible orders --",Num_Remaining[2],"candidates remaining <",Degree(phi),"T , ord> :", [<TransitiveGroupIdentification(s),Order(s)>:s in Second];
+
+	PParity:=PolynomialParity(phi);
+	third:=[G: G in Second | (PParity eq GroupParity(G))];
+	Num_Remaining[3]:=#third;
+vprint GaloisTower,2: "Filtering 3: Polynomial parity", PParity, "--", Num_Remaining[3],"candidates remaining";
+
+	if #third eq 1 then
+		return Num_Remaining, InitialCandidates, third, W, WreathBlocks;
+	end if;
+	
+	Autoo:=AutomorphismGroup(ext<Qp|phi>,Qp);
+	Fourth:=[];
+
+ 	if Order(Autoo) eq n then
+		Num_Remaining[4]:=1;
+vprint GaloisTower,2: "Filtering 4: Automorphism group is Galois group"; 	
+		return Num_Remaining, InitialCandidates, [Autoo], W, WreathBlocks;
+	end if;
+
+	for i in [1..#third] do
+		G:=third[i];
+		Cen:=Centralizer(Sym(n),G);
+	
+		if IsIsomorphic(Autoo,Cen) then
+			Append(~Fourth,G);
+		end if;
+
+	end for;
+
+	Num_Remaining[4]:=#Fourth;
+vprint GaloisTower,2: "Filtering 4: Automorphism group of order",#Autoo,"--",Num_Remaining[4],"candidates remaining";
+	if #Fourth eq 1 then
+		return Num_Remaining, InitialCandidates, Fourth, W, WreathBlocks;
+	end if;
+
+
+	BTuples:=[];
+
+	GalT1:=TameGaloisGroup(T1);
+
+	for n in Fourth do
+		bool,B1:=PossibleB1(n,GalT1);
+		
+		if bool then
+			Append(~BTuples,<n,B1>);
+		end if;
+	end for;
+
+	TameGrp:=TameGaloisGroup(T);
+	Fifth:=[];  //after using in Num_Remaining, rename it BSTuples
+
+	for m in BTuples do  //now over BTuples
+		
+		Candidate:=m[1];
+
+		B:=m[2];  		//Possible B's.  Loop over this.
+
+		BS_set:={};  //Set of tuples <B1,[S]>
+		for B1 in B do
+
+			bool,S:=AMP_Max_Tame_Test(Candidate, TameGrp, p, B1);
+			//bool;
+	
+			if bool then
+				BS_set:=BS_set join {<B1,S>};
+			end if;
+		end for;
+		
+		if #BS_set gt 0 then
+	
+			Append(~Fifth,<Candidate,BS_set>);
+		end if;
+
+	end for;
+
+	Num_Remaining[5]:=#Fifth;
+vprint GaloisTower,2: "Filtering 5: Max tame test  --",Num_Remaining[5],"candidates remaining"; 
+
+	if #Fifth eq 1 then
+
+		return Num_Remaining, InitialCandidates, [t[1]: t in Fifth], W, WreathBlocks;
+	end if;
+	
+	BSTuples:=Fifth;
+
+	Sixth:=[];  	//after using in Num_Remaining, rename it BSU_Tuples.  Contains B1, S, and U.
+
+	for m in BSTuples do
+		Candidate:=m[1];
+		CurrentSet:=m[2];  //of the form {<B1, [S]>}.
+
+		BSU_set:={};
+
+		for C in CurrentSet do
+			B1:=C[1];
+			Possible_S:=C[2];
+
+			bool,U:=PrevNormalTest(Candidate,N1,B1);
+
+			if bool then
+				BSU_set:= BSU_set join {<B1,Possible_S,U> };
+			end if;	
+
+		end for;
+
+		if #BSU_set gt 0 then
+			Append(~Sixth,<Candidate,BSU_set>);
+		end if;
+
+	end for;
+
+	Num_Remaining[6]:=#Sixth;
+vprint GaloisTower,2: "Filtering 6: Prev normal test  --",Num_Remaining[6],"candidates remaining";
+
+	if #Sixth eq 1 then
+		return Num_Remaining, InitialCandidates, [s[1]: s in Sixth], W, WreathBlocks;
+	end if;
+	
+	BSU_Tuples:=Sixth;
+
+	//Change the next four lines
+
+	Seventh:=[];
+
+	for t in BSU_Tuples do
+
+		H:=t[1];
+		CurrentSet:=t[2];
+
+		New_set:={};   // {<B1, SU_set>}
+
+		for C in CurrentSet do
+			B1:=C[1];
+			Possible_S:=C[2];
+			Possible_U:=C[3];
+			SU_set:={};			//{<s,u>}
+
+			for s in Possible_S do
+
+				for u in Possible_U do
+					bool:=IsIsomorphic(quo<B1|s>, quo<u|(s meet u)>);
+				
+
+					if bool then
+						SU_set:=SU_set join {<s,u>};
+					end if;
+
+				end for;
+
+			end for;
+
+			if #SU_set gt 0 then
+				New_set:=New_set join {<B1, SU_set>};
+
+			end if;
+
+
+		end for;
+
+		if #New_set gt 0 then
+			Append(~Seventh,<H,New_set>);
+		end if;
+
+	end for;
+
+	Num_Remaining[7]:=#Seventh;
+vprint GaloisTower,2: "Filtering 7 --",Num_Remaining[7],"candidates remaining";
+
+	if #Seventh eq 1 then
+		return Num_Remaining, InitialCandidates, [s[1]: s in Seventh], W, WreathBlocks;
+	end if;
+	
+	Eighth:=[];
+
+	for v in Seventh do
+
+		H:=v[1];
+		Btupleset:=v[2];
+
+		bbool, D:=PossibleD(H,DL1,Gal1);
+
+		if bbool then
+			Append(~Eighth,<H,Btupleset,D>);
+		end if;
+
+	end for;	
+
+	Num_Remaining[8]:=#Eighth;
+vprint GaloisTower,2: "Filtering 8 --",Num_Remaining[8],"candidates remaining";
+	
+	if #Eighth eq 1 then
+		return Num_Remaining, InitialCandidates, [s[1]: s in Eighth], W, WreathBlocks;
+	end if;
+	
+	Ninth:=[];
+
+	for r in Eighth do
+
+		H:=r[1];
+
+		BB:={};   //will be {<B1,s,u,D1,D0>}
+
+		for T in r[2] do
+			B1:=T[1];
+			su_pairs:=T[2];
+
+			for w in su_pairs do
+				s:=w[1];
+				u:=w[2];
+
+				for z in r[3] do
+		        		D1:=z[1];
+                        		if u subset D1 then
+						for D0 in z[2] do
+							Group1:=quo<(s meet D1)|(s meet D0)>;
+							bool1:= (Order(Group1) eq p^s1) and IsElementaryAbelian(Group1);
+							Group2:=quo<(s meet u)|((s meet u) meet D0)>;
+							bool2:=(Order(Group2) le p^s1) and IsElementaryAbelian(Group2) and IspGroup(Group2,p);
+
+							TN1L0_TN1 := #(u meet s)/#(D0 meet u meet s);
+							TN1_K := #H/#(u meet s);
+							e0 := DL1/p^Valuation(DL1,p);
+							N1_T1 := Order(N1)/Degree(T1,K);
+							possible_orders := {TN1_K*p^w:w in [Valuation(TN1L0_TN1,p)..e0*N1_T1*Valuation(TN1L0_TN1,p)]};
+
+                                        		bool3:=#H in possible_orders;
+										
+							if (bool1 and bool2 and bool3) then
+								BB:=BB join {<B1,s,u,D1,D0>};
+							end if;
+
+			 			end for;
+
+                            		end if;
+				end for;
+
+			end for;
+		end for;
+
+		if #BB gt 0 then
+			Append(~Ninth,<H,BB>);
+		end if;
+	end for;
+
+	Num_Remaining[9]:=#Ninth;
+vprint GaloisTower,2: "Filtering 9 --", Num_Remaining[9],"candidates remaining"; 
+	 
+	Candidates:=[Ninth[i][1] : i in [1..#Ninth]];     //Later: after 8th criteria.
+
+	if #Candidates eq 1 then
+		return Num_Remaining, InitialCandidates, Candidates, W, WreathBlocks;
+	end if;
+
+
+	Candidates:=GlobalGalFilter(Candidates,phi);
+
+	if #Candidates eq 1 then
+		return Num_Remaining, InitialCandidates, Candidates, W, WreathBlocks;
+	end if;
+
+	Sn:=Sym(n);
+
+
+	if NeedResolvent(Sn,DirectProduct(Sym(2),Sym(n-2)),Candidates) then
+		tau:=phi;
+vprint GaloisTower,2: "Filtering: S_2 x S_{n-2} resolvent"; 	
+
+		psi:=S2Resolvent(tau);
+
+		state:=IsitSquareFree(psi);
+
+		while (state eq false) do
+			tau:=Tschirnhausen(tau);
+			psi:=S2Resolvent(tau);
+			state:=IsitSquareFree(psi);
+
+		end while;
+
+		FF:=pFactorDegrees(p,psi);
+		S2ResolventFactorList:=Set(tally(FF));
+
+		New_Candidates:=[G: G in Candidates |S2_OrbitLengthTest(G,tau,S2ResolventFactorList)];
+	        Num_Remaining[10]:=#New_Candidates;		
+vprint GaloisTower,2: "--",Num_Remaining[10],"candidates remaining :", [TransitiveGroupIdentification(a):a in New_Candidates]; 
+	else
+vprint GaloisTower,2: "Filtering: S_2 x S_{n-2} resolvent not useful"; 	
+		New_Candidates:=Candidates;   //keep same list since not affecting it.
+	        Num_Remaining[10]:=#New_Candidates;		
+	end if;
+
+	
+	if #New_Candidates eq 1 then
+		return Num_Remaining, InitialCandidates, New_Candidates, W, WreathBlocks;
+	end if;
+
+	//time Autoo:=TL_Auto(T,phi);
+
+	//Eleventh:=[];
+
+	//for y in Ninth do
+
+		//H:=y[1];
+
+		//if H in New_Candidates then
+			//Poss:=[];
+
+			//tuppSet:=y[2];
+
+			//for v in tuppSet do
+				//s:=v[2];
+				//D0:=v[5];
+
+				//LBool:=IsIsomorphic(Autoo, quo<Normalizer(H,(s meet D0))|(s meet D0)>);
+				//Append(~Poss,LBool);
+
+			//end for;
+
+			//if true in Poss then
+				//Append(~Eleventh,H);
+			//end if;
+
+		//end if;
+
+	//end for;
+
+	//Eleventh:=Set(Eleventh);
+	//Num_Remaining[11]:=#Eleventh;
+	
+	//return Num_Remaining, InitialCandidates, Eleventh, W, WreathBlocks;
+
+	if NeedResolvent(Sn,DirectProduct(Sym(1),DirectProduct(Sym(1),Sym(n-2))),New_Candidates) then  		//H:=S_1 x S_1 x S_{n-2}
+vprint GaloisTower,2: "Filtering: S_1 x S_1 x S_{n-2} resolvent"; 	
+		lrResolventFactorList:=lrFact(phi);
+		C1:=[G: G in New_Candidates| lr_OrbitLengthTest(G,phi,lrResolventFactorList)];
+vprint GaloisTower,2: "--",#C1,"candidates remaining :", [TransitiveGroupIdentification(a):a in C1]; 
+	else
+		C1:=New_Candidates;
+vprint GaloisTower,2: "Filtering: S_1 x S_1 x S_{n-2} resolvent not useful"; 	
+	end if;
+
+	Num_Remaining[#Num_Remaining +1]:=#C1;
+
+	if #C1 eq 1 then
+		return Num_Remaining, InitialCandidates, C1, W, WreathBlocks;
+	end if;
+
+//"need resolvent";
+//[<TransitiveGroupIdentification(cc),NeedResolvent(Sn,cc,C1)>:cc in C1];
+	if NeedResolvent(Sn,DirectProduct(Sym(3),Sym(n-3)),C1) then 				//H:=S_3 x S_{n-3}
+vprint GaloisTower,2: "Filtering: S_3 x S_{n-3} resolvent"; 	
+		S3ResolventFactorList:=tpFact(phi);
+		C2:=[G: G in C1 |S3_OrbitLengthTest(G,phi,S3ResolventFactorList) ];
+vprint GaloisTower,2: "--",#C2,"candidates remaining :", [TransitiveGroupIdentification(a):a in C2]; 
+	else
+		C2:=C1;
+vprint GaloisTower,2: "Filtering: S_3 x S_{n-3} resolvent not useful";
+	end if;
+
+	Num_Remaining[#Num_Remaining +1]:=#C2;
+
+	if #C2 eq 1 then
+		return Num_Remaining, InitialCandidates,C2, W, WreathBlocks;
+	end if;
+
+	if NeedResolvent(Sn, DirectProduct(Sym(2),DirectProduct(Sym(1),Sym(n-3))), C2) then
+vprint GaloisTower,2: "Filtering: S_2 x S_1 x S_{n-3} resolvent"; 	
+		LRResolventFactorList:=LRFact(phi);
+		C3:=[G: G in C2 | LR_OrbitLengthTest(G,phi,LRResolventFactorList) ];
+vprint GaloisTower,2: "--",#C3,"candidates remaining :", [TransitiveGroupIdentification(a):a in C3]; 
+	else
+		C3:=C2;
+vprint GaloisTower,2: "Filtering: S_2 x S_1 x S_{n-3} resolvent not useful";
+	end if;
+
+	Num_Remaining[#Num_Remaining +1]:=#C3;
+
+//	if NeedResolvent(Sn, DirectProduct(Sym(1),DirectProduct(Sym(1),DirectProduct(Sym(1),Sym(n-3)))), C2) then
+//vprint GaloisTower,3: "Filtering: S_1 x S_1 x S_1 x S_{n-3} resolvent would be useful"; 	
+//else
+//vprint GaloisTower,3: "Filtering: S_1 x S_1 x S_1 x S_{n-3} resolvent is not useful"; 	
+//end if;
+//	if NeedResolvent(Sn, (DirectProduct(Sym(4),Sym(n-4))), C2) then
+//vprint GaloisTower,3: "Filtering: S_4 x S_{n-4} resolvent would be useful"; 	
+//else
+//vprint GaloisTower,3: "Filtering: S_4 x S_{n-4} resolvent is not useful"; 	
+//end if;
+//C3 := LowIndexResolvent(phi,C3);
+
+	return Num_Remaining, InitialCandidates, C3, W, WreathBlocks;
+
+end function;
+
+
+
+function Two_Segments_Eisenstein(phi,L1, L0, Prev_Grp, T,T1)
+vprint GaloisTower,1: "/-------- Entering Two Segments"; 	
+
+vprint GaloisTower,1: "Tower of extensions from ramification polygon";
+vprint GaloisTower,1: "L1",L1;
+vprint GaloisTower,1: "L0",L0;
+vprint GaloisTower,1: "Tamely ramified subfield of splitting field of L1",T1;
+vprint GaloisTower,1: "Tamely ramified subfield of splitting field of L0",T;
+
+//First, we reduce coefficients of phi.
+	n:=Degree(phi);
+	p:=Prime(PrimeRing(T));
+
+	phi:=reduce_poly(phi);	
+	Qp:=CoefficientRing(phi);	
+	ChangePrecision(~phi,Precision(Qp));
+
+//Second, determine the Candidates and filter.
+
+	Num_Remaining, InitialCandidates, Candidates, W, WreathBlocks:=Two_Segments_Filtering(phi,L1, L0, Prev_Grp, T,T1); //InitialCandidates is an array.  Candidates is the collection of remaining keys.
+
+	if (n le TransitiveGroupDatabaseLimit()) and (#Candidates eq 1) then
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+		return Candidates[1],Num_Remaining;						//Early exit
+	end if;
+	
+	if n gt TransitiveGroupDatabaseLimit() then 
+		Candidates:=Flat([Setseq(InitialCandidates[a]): a in Candidates]);  //Put all groups in remaining isomorphism classes in a list.
+	end if;
+
+//More than one Candidate remains so we get the necessary data to form resolvents.
+
+	GloGenerator, h1, Block_Length,Wprime,WreathBlocksprime:=GGlobalRepresentation(phi,L0);   //h1 is embedding map.
+	alpha:=pAdicRoot_Approx(GloGenerator,1000);
+
+	SubfieldBlocks, alpha:=GlobalRepBlocks(GloGenerator, Block_Length,alpha,h1);
+
+	M:=FujiwaraBound(GloGenerator);
+
+
+
+
+
+	//Here we need to compare W and Wprime since the rest depends on the correct block structure.
+
+	if MyIsConjugate(W,Wprime) then                       //Check if "same" group. Maybe change so you check equal.
+
+		sigma:=MatchBlocks(WreathBlocks,SubfieldBlocks,n);
+		alpha:=ReOrderRoots(sigma,alpha);	
+
+		if W in Candidates then			//If necessary check the starting group.
+
+			if  TestStartingGroup(W,alpha,M,GloGenerator,p) then
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+				return W,Num_Remaining;
+			else 
+				Exclude(~Candidates,W);
+			end if;
+		end if;
+
+		if (n le TransitiveGroupDatabaseLimit()) and (#Candidates eq 1) then
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+			return Candidates[1],Num_Remaining;
+		end if;
+
+		//Try and narrow down the candidates by looking at resolvents for low index subgroups of W.
+
+		UpperLimit:=Max([Index(W,c):c in Candidates]) +1;  //just the max apparently isn't enough
+		//UpperLimit:=n^2;
+	
+		Candidates:=RelativeResolventFilter(W, Candidates,UpperLimit, alpha, M, GloGenerator,p);
+
+		if (n le TransitiveGroupDatabaseLimit()) and (#Candidates eq 1) then
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+			return Candidates[1],Num_Remaining;
+		end if;
+
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+		return Candidates, Num_Remaining;
+
+	end if;
+
+
+
+	
+
+	//Case where W is a subset of Wprime
+
+	if (W subset Wprime) then
+
+vprint GaloisTower,1: "BURP!!! ";
+
+		sigma:=MatchBlocks(WreathBlocksprime,SubfieldBlocks,n);
+		alpha:=ReOrderRoots(sigma,alpha);
+
+		UpperLimit:=Max([Index(Wprime,c):c in Candidates]) +1;  //just the max apparently isn't enough
+		//UpperLimit:=n^2;
+	
+		Candidates:=RelativeResolventFilter(Wprime, Candidates,UpperLimit, alpha, M, GloGenerator,p);
+
+		if (n le TransitiveGroupDatabaseLimit()) and (#Candidates eq 1) then
+			return Candidates[1],Num_Remaining;
+		end if;
+
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+		return Candidates, Num_Remaining;
+
+	end if;
+
+
+	//Case where W is not a subset of Wprime directly.
+
+	error "This Case has not been implemented yet.";
+
+
+
+vprint GaloisTower,1: "\\------- Leaving Two Segments"; 	
+	return Candidates, Num_Remaining;
+
+end function;
+
+
+function Three_Segments_Eisenstein(L)
+vprint GaloisTower,1: "/-------- Entering Three Segments"; 	
+	Qp:=PrimeRing(L[1]);
+
+	if #L ne 3 then
+		error "Error: The number of segments is wrong";
+	end if;
+
+	if IsTamelyRamified(L[1]) then   //Same as seeing if there is a horizontal segment.
+
+			T1:=L[1];   //same in Pauli's code.
+			T:=Max_Tame_Subextension(DefiningPolynomial(L[2],Qp));
+	else
+			T1:=Max_Tame_Subextension(DefiningPolynomial(L[1],Qp));
+			T:=Max_Tame_Subextension(DefiningPolynomial(L[2],Qp));
+	end if;
+
+
+	N1:= Two_Segments_Eisenstein(DefiningPolynomial(L[2],Qp),L[1], L[2], CyclicGroup(1), T,T1);	//will be prevgrp after first
+
+
+	//Now for third segment
+
+	TT:=Max_Tame_Subextension(DefiningPolynomial(L[3],Qp));
+vprint GaloisTower,1: "\\-------- Leaving Three Segments"; 	
+
+	return Two_Segments_Eisenstein(DefiningPolynomial(L[3],Qp),L[2], L[3], N1, TT,T);
+
+end function;
+
+
+
+// finds Galois groups of Eisenstein polynomials
+function Eisenstein_Case(phi)
+
+	if IsEisenstein(phi) eq false then
+		error "Error:  Input polynomial is not Eisenstein";
+	end if;
+	
+	phi:=reduce_poly(phi);
+	n:=Degree(phi);
+
+	Qp:=CoefficientRing(phi);
+	p:=Prime(Qp);
+
+	prec:=Precision(Qp);
+
+	ChangePrecision(~phi,prec);
+
+	//Catch precision if it's too low for discriminant.
+
+	ramification_polygon,rho:=My_RamificationPolygon(phi);
+	vertices, slopes:=Recover_Vertices_Slopes(ramification_polygon);
+
+	my_discriminant:=RecoverDiscriminant(vertices);		//Find valuation of discriminant.
+	my_discriminant:=Integers()!my_discriminant;
+
+	if prec le my_discriminant then
+"Discriminant bug detected, fixed";
+		
+		Zp:=pAdicRing(p, my_discriminant + 3);
+		Zx:=PolynomialRing(Zp);
+		return Eisenstein_Case(Zx!phi);
+	end if;
+	
+	//Early Exits.
+
+	if Valuation(n,p) eq 0 then
+
+		return TameGaloisGroup(StemField(phi)); 
+	end if;
+
+
+	if n eq p then
+		phi:=MakeEisenstein(phi);
+		return One_Segment(phi);
+		
+	end if;
+
+	K:=ext<Qp|phi>;		//stem field
+
+	if (Number_Of_Segments(phi) eq 1) and (n eq (p^(Valuation(n,p)))) then
+		 return One_Segment(phi);
+	end if;
+
+	Autoo:=AutomorphismGroup(K,Qp);  //Maybe not do this here.
+
+	if Order(Autoo) eq n then
+		return Autoo;  //We are in the normal case here.
+		
+	end if;
+
+	L:=Ramification_Segments(K);
+
+	if #L eq 2 then
+		L1:=L[1];
+		L0:= L[2];
+
+		if IsTamelyRamified(L[1]) then   //Same as seeing if there is a horizontal segment.
+
+			T1:=L1;   //same in Pauli's code.
+			T:=Max_Tame_Subextension(DefiningPolynomial(L0,Qp));
+		else
+			T1:=Max_Tame_Subextension(DefiningPolynomial(L1,Qp));
+			T:=Max_Tame_Subextension(DefiningPolynomial(L0,Qp));
+		end if;
+
+		Prev_Grp:=CyclicGroup(1);
+
+		return Two_Segments_Eisenstein(DefiningPolynomial(L0,Qp),L1, L0, Prev_Grp, T,T1);
+	end if;
+
+	if #L eq 3 then
+
+		return Three_Segments_Eisenstein(L);
+
+	end if;
+
+	return 0;
+
+end function;

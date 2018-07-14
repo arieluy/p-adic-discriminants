@@ -1,0 +1,1544 @@
+function ProcessVertices(lis)
+
+//Input: List of vertices.
+
+//Purpose: remove the vertices that aren't endpoints.
+
+	N:=NewtonPolygon(lis);	
+	vertices:=LowerVertices(N);
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];	//get rid of point with x-coordinate=0. 
+	end if;
+
+	return vertices;
+
+end function;
+
+
+
+function MySlope(tup1,tup2)
+
+	//Input:  tup1=(x1,y1), tup2=(x2,y2).
+
+	//Output: slope of line through the two points.
+
+	x1:=tup1[1];
+	y1:=tup1[2];
+
+	x2:=tup2[1];
+	y2:=tup2[2];
+
+	if x1 eq x2 then
+		return "Undefined slope";  //Type is MonStgElt
+	end if;
+
+	m:=(y2-y1)/(x2-x1);
+
+	return Rationals()!m;
+
+end function;
+
+
+
+function FindVertices(slopelist, segmentlengths)
+
+	//Given the slopes and segment lengths find the vertices of the ramification polygon.
+
+	n:=1 + &+segmentlengths;
+
+	vertices:=[<n,0>];  //last vertex.  We will work backwards and then reverse this list.
+
+	segmentlengths:=Reverse(segmentlengths);
+	slopes:=Reverse(slopelist);
+
+	Currentx:=n;
+	Currenty:=0;   //Now while loop
+	i:=1;
+
+	while i lt (#segmentlengths +1) do
+
+		Newx:=Currentx-Integers()!(segmentlengths[i]);
+		m:=slopes[i];		
+
+		Newy:= Currenty + Integers()!(m*(Newx - Currentx));
+
+		Append(~vertices,<Newx, Newy>);
+
+		Currentx:=Newx;
+		Currenty:=Newy;
+
+		i:=i+1;
+
+	end while;
+	
+	vertices:=Reverse(vertices);
+
+	return vertices;
+
+end function;
+
+
+
+function NextLowerPolygon(vertexlist, slopelist)
+
+
+//Let L > L1 > ...>Ll >K be the tower of subfields from the ramification polygon
+//of L/K.  This function determines the ramification polygon, in vertices and slopes, of L1/K.
+
+//Input:  the vertices and slopes of the ramification polygon of L/K.
+
+//Output: the vertices and slopes of the ramification polygon of L1/K.  Also the shrinkfactor ps1.
+
+
+	if #slopelist eq 1 then
+		error "Error: Polygon only has 1 segment.  There is no subfield chain.";
+	end if;
+
+
+//First, make sure the inputted vertex list is in the right form.
+
+	if vertexlist[1][1] eq 0 then
+		vertexlist:=vertexlist[2..#vertexlist];		//get rid of point with x-coordinate=0
+		slopelist:=slopelist[2..#slopelist];		//get rid of first segment.
+	end if;
+
+	if vertexlist[1][1] ne 1 then
+		error "Error: polygon doesn't have a vertex with x-coordinate 1.";
+	end if;  //Fine up to here.
+
+	vertexlist:=vertexlist[2..#vertexlist];  
+	slopelist:=slopelist[2..#slopelist];	//get rid of first segment.
+
+	ps1:=vertexlist[1][1];  	//first endpoint in new polygon
+
+
+//Now determine the lengths of the new segments.
+
+	NewLengths:=[];
+
+	oldxcoords:=[Integers()!vertexlist[i][1]: i in [1..#vertexlist]];
+
+	for i in [1..#slopelist] do
+		c:=oldxcoords[i+1] - oldxcoords[i];
+				
+		NewLengths[i]:=Integers()!(c/ps1);
+	end for;
+
+	vertices:=FindVertices(slopelist, NewLengths);
+		
+	return  vertices, slopelist,ps1;
+
+
+end function;
+
+
+
+function  Possible_Phi0(K,n)
+
+	//K is base field, n is degree of polynomial.  n can be recovered from polygon.
+
+	p:=Prime(PrimeRing(K));
+
+	m:=Valuation(n,p);
+
+	if (n eq p^m) then
+		return {p};
+	else
+		_K_,vk:=ResidueClassField(K);	//vk is Mapping from: RngPad: K to FldFin: _K_
+
+		Kx,vkx:=UnitGroup(_K_);		//vkx is Mapping from: GrpAb: Kx to FldFin: _K_
+
+		if IsCyclic(Kx) then
+
+			a:=Setseq(Generators(Kx))[1];
+			den:=sub<Kx|n*a>;
+
+			S,vS:=quo<Kx |den>;  	//vS is Mapping from: GrpAb: Kx to GrpAb: S.  
+
+			//Correct to here.
+
+			Delta:={(vkx(s@@vS))@@vk  :s in S};   //Map each element of S to K (through _K_ and Kx)
+
+			return {delta*p: delta in Delta};
+		else
+			
+			error "Error: Something has gone terribly wrong.";
+		end if;
+		
+	end if;		
+
+end function;
+
+
+function Ram_OneSegment(Segmentslope, residual_polynomial,BaseField,PolyDegree, leftend)
+
+	if Type(residual_polynomial) eq SeqEnum then
+		error "Error: Second input should be a polynomial.";
+	end if;
+
+	K:=BaseField;
+	n:=PolyDegree;
+	A:=residual_polynomial;
+
+	if Type(K) eq FldPad then
+
+		error "Coefficient Ring must be a ring, not a field.";
+	end if;
+	
+	Fp:=ResidueClassField(PrimeRing(K));
+	p:=#Fp;
+	m:=Valuation(n,p);
+
+	Fq:=ResidueClassField(K);
+	q:=#Fq;
+	Fx:=PolynomialRing(Fq);
+
+	e:=Denominator(-Segmentslope);
+	h:=Numerator(-Segmentslope);
+
+	A:=Fx!A;
+	f1:=Segmental_Inertia(A);
+	f:=LCM(f1,UnityIndex(K,e));
+
+	b, b_tilde:=Difference_XGCD(h,e);
+	a, a_tilde:=Difference_XGCD(e,n);
+
+	Fqf:=ResidueClassField(UnramifiedExtension(K,f));
+	Fqf_unitgroup, unitmap:= UnitGroup(Fqf);
+	zeta:=unitmap(Fqf_unitgroup.1);
+
+	Fz<z>:=PolynomialRing(Fqf);
+	A:=Fz!A;
+	
+	//Now to find the roots of A and r.
+
+	RR:=Roots(A);
+	u:=[r[1]^leftend: r in RR];
+	u1:=u[1];
+
+	if Log(u1) eq 0 then
+		r_prime:=0;
+	else
+		r_prime:=Integers()!(Log(u1^b)/Log(zeta));
+	end if;
+
+	
+	if r_prime in  Seqset([0..(e-1)]) then
+		r:=r_prime;
+
+	else
+		r:=(r_prime mod e);
+
+	end if;	
+
+
+	//Finding M
+
+	Fqf_plus,ADDMap:=AdditiveGroup(Fqf); //ADDMap maps Fqf_plus to Fqf
+	M:=sub<Fqf_plus|Identity(Fqf_plus)>;
+	i:=1;
+
+	state:=Order(M) eq p^m;
+
+
+	while state eq false do
+
+		Cons:=u[i]/(zeta^(r*h));
+		Cons:=Fqf!Cons;
+		psi:=z^e -Cons;
+
+		RRi:=Roots(psi);
+		ui:=[r[1]: r in RRi];
+		gens:=[(a*s)@@ADDMap: s in ui];
+		M:=sub<Fqf_plus|gens cat Setseq(Generators(M))>;
+		i:=i+1;
+
+		state:=Order(M) eq p^m;
+
+	end while;
+	
+	MGens:=Generators(M);
+	V:=VectorSpace(Fp,#MGens);
+	B:=Basis(sub<V|[V!Eltseq(b): b in MGens]>);
+
+	k:=(r*(q-1))/e;
+	l:=(-1+q^f)/e;
+
+	k:=Integers()!k;
+	l:=Integers()!l;
+
+	Expss:=[];	
+
+	for j in [1..Dimension(V)] do
+
+		current:=M.j;
+		current:=ADDMap(current);
+
+		if Log(current) eq 0 then
+			Expss[j]:=0;
+		else
+			Expss[j]:=Integers()!(Log(current)/Log(zeta));
+
+		end if;				
+
+	end for;
+
+
+	S_rows:=[];
+	T_rows:=[];
+
+
+	for s in [1..Dimension(V)] do		//Finding the rows of S using the automorphism s defined on powers of zeta
+
+		j:=Expss[s];
+
+		temp:=zeta^(l*h +j);
+		temp:=temp@@ADDMap;
+		temp:=M!temp;
+		temp:=V!Eltseq(temp);
+
+		temp:=ElementToSequence(temp);
+
+		S_rows[s]:=temp;
+
+	end for;
+
+
+	for t in [1..Dimension(V)] do		//Find the rows of T using the automorphism t defined on powers of zeta
+
+		j:=Expss[t];
+
+		temp:=zeta^(h*k +q*j);
+		temp:=temp@@ADDMap;
+		temp:=M!temp;
+		temp:=V!Eltseq(temp);
+
+		temp:=ElementToSequence(temp);
+
+		T_rows[t]:=temp;  		
+
+	end for;
+
+
+	S:=Matrix(GF(p), S_rows);
+	T:=Matrix(GF(p), T_rows);
+
+	GGLL:=GL(m,Fp);
+
+	S:=GGLL!S;
+	T:=GGLL!T;
+
+	Matgenn:=sub<GGLL|S,T>;
+
+	G:=AffineGroup(Matgenn);
+	
+	return G;
+
+end function;
+
+
+
+
+function Possible_Auto_Orders(vertexlist, slopelist, residual_polynomials)
+
+	if Type(residual_polynomials) eq Tup then
+
+		residual_polynomials:=TupleToSequence(residual_polynomials);
+	end if;
+
+	if Type(residual_polynomials) ne SeqEnum then
+		error "Error: Third input should be a list.";
+	end if;
+
+	Count:={1};  //1 root from infinite segment, which is typically tossed.
+
+	vertices:=vertexlist;
+	slopes:=slopelist;
+	
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+
+	a:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+	
+	for i in [1..#slopes] do
+
+		if (slopes[i] in Integers()) then
+
+			di:=a[i+1]-a[i];    //length of segment
+			Ai:=residual_polynomials[i];
+
+			if HasRoot(Ai) then
+				
+				RRoots:=Roots(Ai);
+
+				for j in [1..#RRoots] do
+
+					r:=RRoots[j][2];
+
+					if r eq 1 then
+						Count:={a +1: a in Count};  //if root is simple add 1 to list
+					else
+						Count:={a + b: a in Count, b in [0..r] }; // otherwise add between 0 and r to list.
+
+					end if;
+
+				end for;
+			end if;
+
+
+		end if;
+
+	end for;
+
+	n:= Integers()!Max(a); //Degree of polynomial
+
+	//ALL THAT'S LEFT IS TO THROW OUT ORDERS THAT DON'T DIVIDE n=DEG(POLY)
+
+	return Set([b: b in Count|IsDivisibleBy(n,b)]);
+
+end function;
+
+
+
+function Possible_AutoGroups(vertexlist, residual_polynomials)
+
+	vertices:=ProcessVertices(vertexlist);
+
+	slopes:=[];
+
+	for i in [1..(#vertices -1)] do  	//Find slopes using the function MySlope
+
+		tup1:=vertices[i];
+		tup2:=vertices[i+1];
+		s:=MySlope(tup1,tup2);
+
+		Append(~slopes,s);
+	end for;
+
+
+	ords:=Possible_Auto_Orders(vertices, slopes, residual_polynomials);
+
+	possi:=[];	
+
+	for m in ords do
+
+		if m le TransitiveGroupDatabaseLimit() then
+
+			First:=TransitiveGroups(m);
+			Second:=[G : G in First | Order(G) eq m];
+			Third:=[G: G in Second | IsSolvable(G)];
+
+			T:=Third;
+		else
+
+			Sm:=Sym(m);
+
+			T:=Subgroups(Sm:IsTransitive:=true, IsSolvable:=true, OrderEqual:=m);
+			T:=[r`subgroup: r in T];
+		end if;
+
+		possi:=possi cat T;
+
+	end for;
+
+	return possi;
+
+end function;
+
+
+
+function SinclairStartingGroup(vertexlist,slopelist, residualpolynomials, BaseField,phi_0)
+
+	vertices:=vertexlist;
+	slopes:=slopelist;
+	
+	K:=BaseField;
+	Ky<y>:=PolynomialRing(K);
+	pi_K:=UniformizingElement(K);
+
+	n:=RecoverPolyDegree(vertices);
+	p:=Prime(PrimeRing(K));
+	m:=Valuation(n,p);
+
+	if #slopes eq 1 then
+		return Ram_OneSegment(slopes[1], residualpolynomials[1],K,n,1);
+	end if;
+
+
+	//Find e0.
+
+	e0:=n/(p^m);
+	e0:=Integers()!e0;
+
+	c:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+
+	prod:=Sym(1);  //initial factor
+	WreathFactors:=[];
+
+
+	for i in [1..#slopes] do
+		PolyDegree:=Integers()!(c[i+1]/c[i]);	//Degree is ratio of x-coord of consecutive endpoints.
+		leftend:=c[i];
+
+		if slopes[i] eq 0 then
+
+			if e0 ne PolyDegree then
+				error "Error: Tame degree is wrong.";
+			end if;
+
+			r,a,b:=Xgcd(e0,1);
+
+			tau:=y^e0 - (K!(-phi_0/pi_K)^b) * pi_K;
+
+			temp:=TameGaloisGroup(ext<K|tau>);  
+
+		else
+				
+			temp:=Ram_OneSegment(slopes[i], residualpolynomials[i],K,PolyDegree,leftend);
+
+		end if;
+
+		Append(~WreathFactors,temp);
+	end for;
+
+
+	WreathFactors:=Reverse(WreathFactors);
+
+	for i in [1..#WreathFactors] do
+		Factt:=WreathFactors[i];
+		prod:=WreathProduct(Factt,prod);
+	end for;
+
+	return prod;
+
+end function;
+
+
+
+function Ram_MaxTame(Vertexlist,slopelist,residual_polynomials,BaseField, phi_0, resexp)
+
+	//resexp:  number that roots of residual polynomials must be raised to.
+
+	vertices:=Vertexlist;
+	slopes:=slopelist;
+
+	if vertices[1][1] eq 0 then				//may not be needed.
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	K:=BaseField;	
+	
+	p:=Prime(PrimeRing(K));
+	n:=RecoverPolyDegree(vertices);	
+
+	m:=Valuation(n,p);
+	e0:=n div p^m;
+	e0:=Integers()!e0;
+
+	if e0 eq 1 then
+		l:=#slopes;
+	else  //e0>1
+		l:=#slopes-1;		//l+1 st segment is horizontal on x-axis
+	end if;
+
+	a:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+
+	s:=[];
+
+	for j in [1..(l+1)] do
+		s[j]:=Valuation(a[j],p);
+	end for;
+
+	e:=[];
+	h:=[];
+
+	for i in [1..l] do
+		e[i]:=Denominator(-slopes[i]);		//list of (negative) slope denominators
+		h[i]:=Numerator(-slopes[i]);		//list of (negative) slope numerators
+	end for;
+
+	gamma:=[];
+	
+	f:=[];						//Segmental Inertia of segments
+
+	RK,sigma:=ResidueClassField(K);
+	Rs<r>:=PolynomialRing(RK);
+	
+	A:=residual_polynomials;
+	A:=A[1..l];
+
+	for i in [1..l] do
+
+		f[i]:=Segmental_Inertia(A[i]);
+		
+	end for;
+
+	Indicess:=[UnityIndex(K,e0*e[i]): i in [1..l]];
+	F:=LCM(Flat([f,Indicess]));
+
+	I:=UnramifiedExtension(K,F);    
+
+	RI,tau:=ResidueClassField(I);
+	Rw<w>:=PolynomialRing(RI);
+
+	for i in [1..l] do
+
+		Ai:=A[i];
+		Ai:=Rs!Ai;			//Might be unnecessary, magma knows that RL=RK
+
+		Ai:=Rw!Ai;
+		gamma_i:=Roots(Ai:Max:=1);
+		gamma_i:=gamma_i[1][1]^resexp;		//note gamma_i lives in RI
+		gamma_i:=(gamma_i @@ tau);	//find pre_image of gamma_i, this is what we want
+		Append(~gamma,gamma_i);
+
+	end for;
+
+	Iz<z>:=PolynomialRing(I);
+
+	Tame_extensions:=[]; 
+
+	for i in [1..l] do
+		
+		_, bi ,di:=Xgcd(h[i],e[i]);
+		vi:=e0 * p^(m-s[i]) + n +1;		
+
+		Ti:=TotallyRamifiedExtension(I, z^(e0*e[i]) - ((-1)^vi)* phi_0*gamma[i]^(bi*n) );
+		Append(~Tame_extensions,Ti);
+	end for;
+
+	Towe:=TameCompositum(Tame_extensions);
+
+	return Towe;	
+
+end function;
+
+
+
+
+function Sinclair_TwoSegmentCase(Gal1,N1, vertices, slopes,residualpolynomials,BaseField,phi_0, resexp:A:=0, PParity:="")
+
+	//resexp:  the number that roots of residual polynomials must be raised to when computing T/K
+
+	resexp:=Integers()!resexp;
+
+	if #slopes ne #residualpolynomials then
+		error "Error:  Must have a residual polynomial for each segment";  //Catch possible recursion error.
+	end if;
+
+	K:=BaseField;
+	Ky<y>:=PolynomialRing(K);
+	pi_K:=UniformizingElement(K);
+
+	p:=Prime(PrimeRing(K));
+	n:=RecoverPolyDegree(vertices);
+
+	//Gal1 is Gal(Li-1/Li) for segment being included now.
+	//N1 is Gal(Li/K)
+
+	W:=WreathProduct(Gal1,N1);
+
+	Num_Remaining:=[];
+
+	if vertices[1][1] eq 1 then
+		ps1:=vertices[2][1];
+	else
+		ps1:=vertices[1][1];
+	end if;
+
+	s1:=Valuation(ps1,p);
+	T:=Ram_MaxTame(vertices,slopes,residualpolynomials,K, phi_0, resexp);
+
+	//Look at information of rp(L1/K) to get T1, the max tame subext of L1/K.
+	
+	lvert, lslope, shrinkfactor:=NextLowerPolygon(vertices, slopes);
+	shrinkfactor:=Integers()!shrinkfactor;
+	shrinkfactor:=shrinkfactor*resexp;
+
+	if lslope eq [0] then  //second segment is horizontal so T1 is L1
+		m:=Valuation(n,p);
+		e0:=n/(p^m);
+		e0:=Integers()!e0;
+
+		r,a,b:=Xgcd(e0,1);
+
+		tau:=y^e0 - (K!(-phi_0/pi_K)^b) * pi_K;
+		T1:=ext<K|tau>;
+		GalT1:=N1;
+
+	else
+		T1:=Ram_MaxTame(lvert,lslope,residualpolynomials[2..#residualpolynomials], K, phi_0,shrinkfactor);
+		GalT1:=TameGaloisGroup(T1);
+	end if;
+
+	//Find DL1 which is Degree(L1,K).
+
+	DL1:=RecoverPolyDegree(lvert);
+
+	if DL1 ne Integers()!(n/ps1) then
+		error "Error: DL1 is incorrect.";
+	end if;
+
+	//Start filtering.
+
+	Pos_Order:=PossibleCandidateOrders(N1,s1,T,T1,DL1);
+"Possible orders",Pos_Order;
+	if n lt 16 then
+
+		Can:=Subgroups(W:IsTransitive:=true);
+		C:=[r`subgroup: r in Can];
+
+		First:=Keys(CandidateClasses(C));
+		Num_Remaining[1]:=#First;
+
+		Second:=[c: c in First| Order(c) in Pos_Order];
+		Num_Remaining[2]:=#Second;
+	else
+
+		min_order:=Min(Pos_Order);
+		max_order:=Max(Pos_Order); //Use list of possible orders to set parameters for calculating initial group candidates as subgroups of W.
+
+		max_order:=Min(max_order,Order(W));  //Need to limit ourselves to size of W.
+
+		Can:=Subgroups(W:IsTransitive:=true, OrderMultipleOf:=min_order, OrderDividing:=max_order );
+		C:=[r`subgroup: r in Can];
+		InitialCandidates:=CandidateClasses(C);  //associative array
+
+		First:=Keys(InitialCandidates);
+		Num_Remaining[1]:=#First;
+
+		Second:=First;
+		Num_Remaining[2]:=#Second;
+
+	end if;
+
+"After 2", Num_Remaining;
+
+	if Type(PParity) eq MonStgElt then   //PParity not specified.
+
+		ValD:=RecoverDiscriminant(vertices);
+		ValD:=Integers()!ValD;
+
+		if IsOdd(ValD) then
+			PParity:={-1};
+		else
+			PParity:={1,-1};
+		end if;
+
+		third:=[G: G in Second | (GroupParity(G) in PParity)];
+
+	elif PParity in {1, -1} then
+
+		third:=[G: G in Second | (PParity eq GroupParity(G))];
+	else
+
+		error "Error: PParity is of the wrong type.";
+	end if;
+
+
+	Num_Remaining[3]:=#third;
+
+	if #third le 1 then
+		return third, Num_Remaining;
+	end if;
+
+	Fourth:=[];
+
+	if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+		Autoo:=Possible_Auto_Orders(vertices, slopes, residualpolynomials);
+
+		for i in [1..#third] do
+			G:=third[i];
+			Cen:=Centralizer(Sym(n),G);
+
+			if Order(Cen) in Autoo then
+				Append(~Fourth,G);
+			end if;
+
+		end for;
+
+	else
+
+		Autoo:=A;
+
+		for i in [1..#third] do
+			G:=third[i];
+			Cen:=Centralizer(Sym(n),G);
+	
+			if IsIsomorphic(Autoo,Cen) then
+				Append(~Fourth,G);
+			end if;
+
+		end for;
+
+	end if;
+
+	Num_Remaining[4]:=#Fourth;
+
+"After 4", Num_Remaining;
+
+	if #Fourth le 1 then
+		return Fourth, Num_Remaining;
+	end if;
+
+	BTuples:=[];
+
+	for n in Fourth do
+		bool,B1:=PossibleB1(n,GalT1);
+		
+		if bool then
+			Append(~BTuples,<n,B1>);
+		end if;
+	end for;
+
+	TameGrp:=TameGaloisGroup(T);
+	Fifth:=[];  //after using in Num_Remaining, rename it BSTuples
+
+	for m in BTuples do  //now over BTuples
+		
+		Candidate:=m[1];
+
+		B:=m[2];  		//Possible B's.  Loop over this.
+
+		BS_set:={};  //Set of tuples <B1,[S]>
+		for B1 in B do
+
+			bool,S:=AMP_Max_Tame_Test(Candidate, TameGrp, p, B1);
+			//bool;
+	
+			if bool then
+				BS_set:=BS_set join {<B1,S>};
+			end if;
+		end for;
+		
+		if #BS_set gt 0 then
+	
+			Append(~Fifth,<Candidate,BS_set>);
+		end if;
+
+	end for;
+
+	Num_Remaining[5]:=#Fifth;
+
+"After 5", Num_Remaining;
+	
+	if #Fifth le 1 then
+
+		return [t[1]: t in Fifth], Num_Remaining;
+	end if;
+
+
+	BSTuples:=Fifth;
+
+	//return Num_Remaining;
+
+	Sixth:=[];  	//after using in Num_Remaining, rename it BSU_Tuples.  Contains B1, S, and U.
+"#BSTuples",#BSTuples;
+	for m in BSTuples do
+		Candidate:=m[1];
+		CurrentSet:=m[2];  //of the form {<B1, [S]>}.
+//"m",m;
+"#B1",#CurrentSet;
+
+		BSU_set:={};
+
+		for C in CurrentSet do
+			B1:=C[1];
+			Possible_S:=C[2];
+
+			bool,U:=PrevNormalTest(Candidate,N1,B1);
+
+			if bool then
+				BSU_set:= BSU_set join {<B1,Possible_S,U> };
+			end if;	
+
+		end for;
+
+		if #BSU_set gt 0 then
+			Append(~Sixth,<Candidate,BSU_set>);
+		end if;
+
+	end for;
+
+	Num_Remaining[6]:=#Sixth;
+
+"After 6", Num_Remaining;
+
+	if #Sixth le 1 then
+		return [s[1]: s in Sixth], Num_Remaining;
+	end if;
+
+	BSU_Tuples:=Sixth;
+
+	//Change the next four lines
+
+	Seventh:=[];
+
+	for t in BSU_Tuples do
+
+		H:=t[1];
+		CurrentSet:=t[2];
+
+		New_set:={};   // {<B1, SU_set>}
+
+		for C in CurrentSet do
+			B1:=C[1];
+			Possible_S:=C[2];
+			Possible_U:=C[3];
+			SU_set:={};			//{<s,u>}
+
+			for s in Possible_S do
+
+				for u in Possible_U do
+					bool:=IsIsomorphic(quo<B1|s>, quo<u|(s meet u)>);
+				
+
+					if bool then
+						SU_set:=SU_set join {<s,u>};
+					end if;
+
+				end for;
+
+			end for;
+
+			if #SU_set gt 0 then
+				New_set:=New_set join {<B1, SU_set>};
+
+			end if;
+
+
+		end for;
+
+		if #New_set gt 0 then
+			Append(~Seventh,<H,New_set>);
+		end if;
+
+	end for;
+
+	Num_Remaining[7]:=#Seventh;
+
+"After 7", Num_Remaining;
+
+	if #Seventh le 1 then
+		return [s[1]: s in Seventh], Num_Remaining;
+	end if;
+	
+	Eighth:=[];
+
+	for v in Seventh do
+
+		H:=v[1];
+		Btupleset:=v[2];
+
+		bbool, D:=PossibleD(H,DL1,Gal1);
+
+		if bbool then
+			Append(~Eighth,<H,Btupleset,D>);
+		end if;
+
+	end for;
+	
+
+	Num_Remaining[8]:=#Eighth;
+
+"After 8", Num_Remaining;
+
+	if #[r[1]: r in Eighth] le 1 then
+		return [r[1]: r in Eighth], Num_Remaining;
+	end if;
+	
+	Ninth:=[];
+
+	for r in Eighth do
+
+		H:=r[1];
+
+		BB:={};   //will be {<B1,s,u,D1,D0>}
+
+		for T in r[2] do
+			B1:=T[1];
+			su_pairs:=T[2];
+
+			for w in su_pairs do
+				s:=w[1];
+				u:=w[2];
+
+				for z in r[3] do
+		        		D1:=z[1];
+                        		if u subset D1 then
+						for D0 in z[2] do
+							Group1:=quo<(s meet D1)|(s meet D0)>;
+							bool1:= (Order(Group1) eq p^s1) and IsElementaryAbelian(Group1);
+							Group2:=quo<(s meet u)|((s meet u) meet D0)>;
+							bool2:=(Order(Group2) le p^s1) and IsElementaryAbelian(Group2) and IspGroup(Group2,p);
+
+							TN1L0_TN1 := #(u meet s)/#(D0 meet u meet s);
+							TN1_K := #H/#(u meet s);
+							e0 := DL1/p^Valuation(DL1,p);
+							N1_T1 := Order(N1)/Degree(T1,K);
+							possible_orders := {TN1_K*p^w:w in [Valuation(TN1L0_TN1,p)..e0*N1_T1*Valuation(TN1L0_TN1,p)]};
+
+                                        		bool3:=#H in possible_orders;
+										
+							if (bool1 and bool2 and bool3) then
+								BB:=BB join {<B1,s,u,D1,D0>};
+							end if;
+
+			 			end for;
+
+                            		end if;
+				end for;
+
+			end for;
+		end for;
+
+		if #BB gt 0 then
+			Append(~Ninth,<H,BB>);
+		end if;
+	end for;
+
+	Num_Remaining[9]:=#Ninth;
+	 
+	Candidates:=[Ninth[i][1] : i in [1..#Ninth]];
+
+	return Candidates, Num_Remaining;
+
+end function;
+
+
+
+function Sinclair_ThreeSegmentCase(vertices, slopes,residualpolynomials,BaseField,phi_0, WreathFactors:A:=0,PParity:="")
+
+
+	//We first do segments 2 and 3.  The first is incorporated after.	
+
+	lvert, lslope, shrinkfactor:=NextLowerPolygon(vertices, slopes);
+
+	PossibleN1,_:=Sinclair_TwoSegmentCase(WreathFactors[2],WreathFactors[3],lvert, lslope, residualpolynomials[2..#residualpolynomials], BaseField,phi_0, shrinkfactor);
+
+
+	//Now incorporate segment 1
+
+	Gal1:=WreathFactors[1];
+	Candidates:=[];
+
+"Num N1", #PossibleN1;
+
+	if Type(PParity) eq MonStgElt then   //PParity not specified.
+
+		for N1 in PossibleN1 do
+
+"N1", TransitiveGroupIdentification(N1);
+
+			if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+				a,b:=Sinclair_TwoSegmentCase(Gal1,N1, vertices, slopes,residualpolynomials,BaseField,phi_0, 1); 
+				Candidates:=Candidates cat a;
+			else
+
+				Autoo:=A;
+
+				a,b:=Sinclair_TwoSegmentCase(Gal1,N1, vertices, slopes,residualpolynomials,BaseField,phi_0, 1:A:=Autoo);
+				Candidates:=Candidates cat a;
+
+			end if;
+
+		end for;
+
+	elif PParity in {1,-1} then
+		PP:=PParity;
+
+		for N1 in PossibleN1 do
+
+"N1", TransitiveGroupIdentification(N1);
+
+			if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+				a,b:=Sinclair_TwoSegmentCase(Gal1,N1, vertices, slopes,residualpolynomials,BaseField,phi_0, 1:PParity:=PP); 
+				Candidates:=Candidates cat a;
+			else
+
+				Autoo:=A;
+
+				a,b:=Sinclair_TwoSegmentCase(Gal1,N1, vertices, slopes,residualpolynomials,BaseField,phi_0, 1:A:=Autoo, PParity:=PP);
+				Candidates:=Candidates cat a;
+
+			end if;
+
+		end for;
+
+	else 
+		error "Error: PParity is of the wrong type.";
+	end if;	
+
+
+	if IsEmpty(Candidates) then 	//Can happen with bad automorphism group
+
+		return [];
+	end if;
+
+	//sort by trans id.
+
+	return SetToSequence(Keys(CandidateClasses(Candidates)));
+
+end function; 
+	
+
+function SinclairMain(vertexlist, residualpolynomials, BaseField,phi_0:A:=0,PParity:="")
+//Primary function
+
+	//1. Process inputs
+
+	vertices:=ProcessVertices(vertexlist);	
+
+	slopes:=[];
+
+	for i in [1..(#vertices -1)] do  	//Find slopes using the function MySlope
+
+		tup1:=vertices[i];
+		tup2:=vertices[i+1];
+		s:=MySlope(tup1,tup2);
+
+		Append(~slopes,s);
+	end for;
+
+	K:=BaseField;
+	Ky<y>:=PolynomialRing(K);
+	pi_K:=UniformizingElement(K);
+
+	n:=RecoverPolyDegree(vertices);
+
+	p:=Prime(PrimeRing(K));
+	m:=Valuation(n,p);
+
+	e0:=n/(p^m);
+	e0:=Integers()!e0;
+
+
+	if Type(residualpolynomials) eq Tup then
+
+		residualpolynomials:=TupleToSequence(residualpolynomials);
+	end if;
+
+
+	//2. Early exits for one segment case.
+
+	if n eq e0 then
+
+		r,a,b:=Xgcd(e0,1);
+		tau:=y^e0 - (K!(-phi_0/pi_K)^b) * pi_K;
+
+		return [TameGaloisGroup(ext<K|tau>)];
+
+	end if;
+
+	
+	if #slopes eq 1 then
+		G:=Ram_OneSegment(slopes[1], residualpolynomials[1],K,n,1);
+
+		return [G];
+	end if;
+
+
+	//3. Find Gal(L_{i-1}/L_i) for each i store in list.
+
+	c:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+
+	WreathFactors:=[];
+
+	for i in [1..#slopes] do
+		PolyDegree:=Integers()!(c[i+1]/c[i]);	//Degree is ratio of x-coord of consecutive endpoints.
+		leftend:=c[i];
+
+		if slopes[i] eq 0 then
+
+			r,a,b:=Xgcd(e0,1);
+			tau:=y^e0 - (K!(-phi_0/pi_K)^b) * pi_K;
+
+			temp:=TameGaloisGroup(ext<K|tau>);  
+
+		else
+				
+			temp:=Ram_OneSegment(slopes[i], residualpolynomials[i],K,PolyDegree,leftend);
+
+		end if;
+
+		Append(~WreathFactors,temp);
+	end for; 
+	//Currently WreathFactors is [Gal(L0/L1), Gal(L1/L2), Gal(L2/L3), ..., Gal(Ll/K)]
+
+
+	//4. Two Segment Case
+
+	if #slopes eq 2 then
+
+
+		if Type(PParity) eq MonStgElt then	//PParity not specified.
+
+
+			if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+				return Sinclair_TwoSegmentCase(WreathFactors[1],WreathFactors[2],vertices, slopes,residualpolynomials,K,phi_0,1);
+			else
+
+				Autoo:=A;
+
+				return Sinclair_TwoSegmentCase(WreathFactors[1],WreathFactors[2],vertices, slopes,residualpolynomials,K,phi_0,1:A:=Autoo);
+			end if;
+
+
+		elif PParity in {1,-1} then
+
+			PP:=PParity;
+
+			if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+				return Sinclair_TwoSegmentCase(WreathFactors[1],WreathFactors[2],vertices, slopes,residualpolynomials,K,phi_0,1:PParity:=PP);
+			else
+
+				Autoo:=A;
+
+				return Sinclair_TwoSegmentCase(WreathFactors[1],WreathFactors[2],vertices, slopes,residualpolynomials,K,phi_0,1:A:=Autoo, PParity:=PP);
+			end if;
+		else
+			error "Error:  PParity is of the wrong type";
+		end if;
+		 
+	end if;
+
+
+	if #slopes eq 3 then 
+
+
+		if Type(PParity) eq MonStgElt then	//PParity not specified.
+
+			if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+
+				return 	Sinclair_ThreeSegmentCase(vertices, slopes,residualpolynomials,BaseField,phi_0, WreathFactors);
+			else
+
+				Autoo:=A;
+
+				return  Sinclair_ThreeSegmentCase(vertices, slopes,residualpolynomials,BaseField,phi_0, WreathFactors:A:=Autoo);
+			end if;
+
+
+		elif PParity in {1,-1} then
+
+			PP:=PParity;
+
+			if Type(A) eq RngIntElt then  //Automorphism group not specified
+
+
+				return 	Sinclair_ThreeSegmentCase(vertices, slopes,residualpolynomials,BaseField,phi_0, WreathFactors:PParity:=PP);
+			else
+
+				Autoo:=A;
+
+				return  Sinclair_ThreeSegmentCase(vertices, slopes,residualpolynomials,BaseField,phi_0, WreathFactors:A:=Autoo, PParity:=PP);
+			end if;
+
+		else
+			error "Error:  PParity is of the wrong type";
+		end if;
+		 
+	end if;
+
+
+	if #slopes gt 3 then
+		error "Error: This case isn't implemented yet.";
+	end if;
+
+	return 0;
+
+end function;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//Verification functions below.
+
+
+function My_ResidualPolynomials(ramification_polygon,rho)
+
+	//rho is ramification polynomial.
+
+	L:= CoefficientRing(rho);
+
+	vertices, slopes:=Recover_Vertices_Slopes(ramification_polygon);
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	a:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+	b:=[Integers()!vertices[i][2]: i in [1..#vertices]];	//list of y-coordinates of vertices
+
+	l:=#slopes;
+
+	pi_L:=UniformizingElement(L);
+	
+	e:=[];
+	h:=[];
+
+	for i in [1..l] do
+		e[i]:=Denominator(-slopes[i]);		//list of (negative) slope denominators
+		h[i]:=Numerator(-slopes[i]);			//list of (negative) slope numerators
+	end for;
+
+	A:=[];
+	
+	RL,omega:=ResidueClassField(L);
+	Ry<y>:=PolynomialRing(RL);
+
+	for i in [1..l] do
+		di:=a[i+1]-a[i];
+		fin:=Integers()!(di/e[i]);
+		Ai:=Polynomial(Ry,[&+[omega(Coefficient(rho,j*e[i]+a[i]) div pi_L^(-j*h[i]+b[i]))*y^j: j in [0..fin]]]);
+		Ai:=Ry!Ai;
+		A[i]:=Ai;
+	end for;
+
+
+	return A;
+
+
+end function;
+
+
+
+function Check_LowerPolygon(phi)
+
+	if Number_Of_Segments(phi) eq 1 then
+		return true;
+	end if;
+	
+	K:=CoefficientRing(phi);
+	stem:=ext<K|phi>;
+
+	L:=Ramification_Segments(stem);
+	 L:=L[#L];
+
+	//First thing for comparison is the output of NextLowerPolygon
+
+	ramification_polygon1,rho1:=My_RamificationPolygon(phi);
+	vertices1, slopes1:=Recover_Vertices_Slopes(ramification_polygon1);
+
+	Firstv, Firsts:=NextLowerPolygon(vertices1, slopes1);
+
+	//Second thing for comparison is rampolygon of L1/K.
+
+	L1:=BaseRing(L);
+
+	psi:=DefiningPolynomial(L1,PrimeRing(L1));
+
+	ramification_polygon2, rho2:=My_RamificationPolygon(psi);
+	vertices2, slopes2:=Recover_Vertices_Slopes(ramification_polygon2);
+
+	//Comparisons
+
+	bool1:=Firstv eq vertices2;
+	bool2:=Firsts eq slopes2;
+
+	bool3:=Valuation(Discriminant(psi)) eq RecoverDiscriminant(vertices2);
+
+
+	if {bool1, bool2, bool3} eq {true} then
+
+		return true;
+	else
+		return false;
+	end if;
+
+	return false;
+
+end function;
+
+
+function VerifyMain(phi,Galid)
+
+	//Galid is the transitive group Identification of Gal(phi).
+
+	if IsEisenstein(phi) eq false then
+		error "Error: inputted polynomial isn't Eisenstein";
+	end if;
+
+	ramification_polygon,rho:=My_RamificationPolygon(phi);
+	vertices, slopes:=Recover_Vertices_Slopes(ramification_polygon);
+
+	prec:=Precision(CoefficientRing(phi));
+
+	my_discriminant:=RecoverDiscriminant(vertices);        //Find valuation of discriminant.
+	my_discriminant:=Integers()!my_discriminant;
+
+	if prec le my_discriminant then
+
+    		error "Error: Precision of polynomial is too low.";
+       
+	end if;
+
+	residualpolynomials:=My_ResidualPolynomials(ramification_polygon,rho);
+
+	BaseField:=CoefficientRing(phi);
+
+	phi_0:=ConstantCoefficient(phi);
+
+	if #slopes eq 1 then
+
+		Candidates:=SinclairMain(vertices, residualpolynomials, BaseField,phi_0);
+
+		Cand_Num:=[TransitiveGroupIdentification(r): r in Candidates];
+
+		return Galid in Cand_Num;
+
+	end if;		
+
+	Autoo:=AutomorphismGroup(ext<BaseField|phi>,BaseField);	//Currently we are specifying automorphism group.
+	
+	Candidates:=SinclairMain(vertices, residualpolynomials, BaseField,phi_0:A:=Autoo, PParity:=PolynomialParity(phi));
+
+	Cand_Num:=[TransitiveGroupIdentification(r): r in Candidates];
+
+	return Galid in Cand_Num;
+
+end function;
+
+
+function FilteringPower(phi)
+
+	
+	if IsEisenstein(phi) eq false then
+		error "Error: inputted polynomial isn't Eisenstein";
+	end if;
+
+	ramification_polygon,rho:=My_RamificationPolygon(phi);
+	vertices, slopes:=Recover_Vertices_Slopes(ramification_polygon);
+
+	if #slopes gt 3 then
+		error "Error: Not implemented yet";
+	end if;
+
+	prec:=Precision(CoefficientRing(phi));
+
+	my_discriminant:=RecoverDiscriminant(vertices);        //Find valuation of discriminant.
+	my_discriminant:=Integers()!my_discriminant;
+
+	if prec le my_discriminant then
+
+    		error "Error: Precision of polynomial is too low.";
+       
+	end if;
+
+
+	residualpolynomials:=My_ResidualPolynomials(ramification_polygon,rho);
+
+	BaseField:=CoefficientRing(phi);
+
+	phi_0:=ConstantCoefficient(phi);
+
+	if #slopes eq 1 then
+
+		return SinclairMain(vertices, residualpolynomials, BaseField,phi_0);
+	end if;
+	
+	Autoo:=AutomorphismGroup(ext<BaseField|phi>,BaseField);  //Currently we are specifying automorphism group.
+	
+	//Candidates, Num_Remaining:=SinclairMain(vertices, residualpolynomials, BaseField,phi_0:A:=Autoo, PParity:=PolynomialParity(phi));
+
+	//return Num_Remaining;
+
+	return SinclairMain(vertices, residualpolynomials, BaseField,phi_0:A:=Autoo, PParity:=PolynomialParity(phi));
+
+
+end function;
+
+
+
+function ResidualTheory(phi,order)
+
+//Currently scrapped.  Here is a brief description of the idea.
+
+//If the degree of phi is a power of a prime p and all the residual polynomials are square free then
+// Gal(phi) has order Degree(phi)* [T:K].
+
+	if IsEisenstein(phi) eq false then
+		error "Error: inputted polynomial isn't Eisenstein";
+	end if;
+
+	ramification_polygon,rho:=My_RamificationPolygon(phi);
+	vertices, slopes:=Recover_Vertices_Slopes(ramification_polygon);
+
+	residualpolynomials:=My_ResidualPolynomials(ramification_polygon,rho);
+
+	Squarebool:=[IsitSquareFree(r): r in residualpolynomials];
+
+	if Set(Squarebool) eq {true} then
+
+		K:=CoefficientRing(phi);
+		T:=Max_Tame_Subextension(phi);
+
+		Comparr:=Degree(phi)*Degree(T,K);
+
+		return Comparr eq order;
+	end if;
+
+	return false;
+
+end function;	
+
+
+
+
+function DetermineMySlopes(vertexlist)
+
+//Given the list of vertices of a ramification polygon, returns the list of slopes of the polygon.
+
+	vertices:=ProcessVertices(vertexlist);	
+
+	slopes:=[];
+
+	for i in [1..(#vertices -1)] do  	//Find slopes using the function MySlope
+
+		tup1:=vertices[i];
+		tup2:=vertices[i+1];
+		s:=MySlope(tup1,tup2);
+
+		Append(~slopes,s);
+	end for;
+
+	return slopes;
+
+end function;

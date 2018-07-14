@@ -1,4 +1,5 @@
-load "p-squared-cubed.m";
+// load "p-squared-cubed.m";
+load "JM/Master.magma";
 
 // Checks if two polynomials generate the same extension in Zp
 function IsSamePoly(phi, psi, p)
@@ -16,31 +17,7 @@ function Polys(p, n)
     return [DefiningPolynomial(k, Zp) : k in L];
 end function;
 
-// Generates a list of polynomials with isomorphic extensions to phi
-function Deg3(p, phi)
-    lst := [];
-    Zp := pAdicRing(p, 10*p);
-    Zpx<x> := PolynomialRing(Zp);
-    E := ext<Zp | phi>;
-    for i1 in [0..6] do
-        for i2 in [0..6] do
-            for i3 in [0..6] do
-                for i4 in [0..6] do
-                    // for i5 in [0..3] do
-                        for j in [1..5] do
-                            psi := x^5 + p*i3*x^4 + p*i4*x^3 + p*i1*x^2 + p*i2*x + p*j;
-                            if IsEisenstein(psi) and HasRoot(Zpx!psi, E) then Append(~lst, psi);
-                            end if;
-                        end for;
-                    // end for;
-                end for;
-            end for;
-        end for;
-    end for;
-    return lst;
-end function;
-
-// Generates a random polynomial with isomorphic extension to phi
+// Generates a random polynomial
 function RandomEisen(p, n, j, UB, LB)
     Zp := pAdicRing(p, 10*p);
     Zpx<x> := PolynomialRing(Zp);
@@ -90,7 +67,7 @@ function CheckC(p, lst)
 end function;
 
 procedure main()
-    primes := [3];
+    primes := [5];
     for p in primes do
         n := p; p;
         plist := Polys(p, n);
@@ -105,39 +82,53 @@ procedure main()
     "done";
 end procedure;
 
-// main();
+//main();
 
 function SortByGaloisGroup(p, lst)
     newlst := [];
     for phi in lst do
         v := Valuation(Discriminant(phi));
-        d := (Integers()!Discriminant(phi) mod p^(1+Integers()!v))/p^(Integers()!v);
-        Append(~newlst, <v, d, phi, GaloisGroup(phi)>);
+        d := (AbsoluteValue(Integers()!Discriminant(phi)) mod p^(1+Integers()!v))/p^(Integers()!v);
+        Append(~newlst, <v-p+1, d, phi, Eisenstein_Case(phi)>);
     end for;
     sorted := []; // sorted is a list of equiv classes based on Galois Group
     for phi in newlst do
         for i in [1..#sorted] do
             if IsIsomorphic(phi[4], sorted[i][1][4]) then
-                Append(~sorted[i], phi); continue phi; 
+                Append(~sorted[i], phi); continue phi;
             end if;
         end for;
         Append(~sorted, [phi]);
     end for;
     newsorted := [[<s[1], s[2]> : s in equivclass] : equivclass in sorted];
+    gen_polys := [[poly[3] : poly in equivclass] : equivclass in sorted];
+    galois_size := [[#poly[4] : poly in equivclass] : equivclass in sorted];
     return newsorted;
 end function;
 
+// improves readability for the data from SortByGaloisGroup 
+function BetterSort(p, lst)
+    sorted := [];
+    for galois_group in lst do
+        new_galois := [<0,[0]>];
+        for i := 1 to p do
+            value_list := [];
+            for tup in galois_group do
+                if tup[1] eq i then Append(~value_list, tup[2]); end if;
+            end for;
+            if value_list ne [] then Append(~new_galois, <i, (value_list)>); end if;
+        end for;
+        Append(~sorted, new_galois[2..#new_galois]);
+    end for;
+    return sorted;
+end function;
 
-
-p := 3; n := p;
-Zp := pAdicRing(p, 10*p);
-Zpx<x> := PolynomialRing(Zp);
-a := 1;
-phi := x^p - p*x^(p-1) + p*(1+a*p);
-d := p^p * (p*(1+a*p))^(p-2) * ((p-1)^p-p*(p-1)^(p-1)+p*(1+a*p));
-Valuation(d,p);
-Valuation(Discriminant(phi));
-
-/*plist := Polys(p, n);
-lst := [f : f in plist | IsEisenstein(f)];
-SortByGaloisGroup(p, lst);*/
+procedure MakeArray(lst)
+    for p in lst do
+        "\n"; p;
+        n := p;
+        plist := Polys(p, n);
+        lst := [f : f in plist | IsEisenstein(f)];
+        BetterSort(p, SortByGaloisGroup(p, lst));
+    end for;
+end procedure;

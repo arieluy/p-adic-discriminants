@@ -1,0 +1,553 @@
+function My_Degree(A)
+	if (Type(A) eq RngUPolElt) then
+		r:=Degree(A);
+	else
+		r:=0;
+	end if;
+	
+        if A eq 0 then
+		r:=0;
+	end if;
+
+	return r;
+
+end function;
+
+
+
+function IsitSquareFree(f)
+
+	if Type(CoefficientRing(f)) eq FldFin then
+		f:=f;
+	else
+
+		Z:=Integers();
+		Zx<x>:=PolynomialRing(Z);
+		f:=Zx!f;
+	end if;
+
+	answer:=My_Degree(GCD(f,Derivative(f))) eq 0;
+
+	return answer;
+
+end function;
+
+
+function Tschirnhausen(P)
+
+	if (Type(P) ne RngUPolElt) then
+		error "Error: P is not univariate.";
+	end if;
+
+	Z:=Integers();
+	Zw<w>:=PolynomialRing(Z);
+	P:=Zw!P; //Comment out if statement if you want to work over ring other than the integers.
+	
+	R:=CoefficientRing(P);
+	T:=[];
+	n:=My_Degree(P);
+	
+	S:=Eltseq(P);
+
+	Rxy<x,y>:=PolynomialRing(R,2);
+	
+	Py:=Evaluate(P,y);	
+	Py:=Rxy!Py;
+
+	Q:=x^2;
+	state:=UnivariatePolynomial(GCD(Q,Derivative(Q,x)));  //Note:  unlike most of my code, state is not a boolean value.
+
+	while ( state notin R) do		//My_Degree(GCD(f,Derivative(f))) gt 0;
+		for y in [1..n] do
+			a:=Random(0,50);
+			Append(~T,a);
+		end for;
+		
+		Ay:=Polynomial(Rxy,T);
+		Ay:=Evaluate(Ay,y);
+	
+		v:=Rxy!(x-Ay);
+		
+		Q:=Resultant(Py,v,y);
+
+		state:=UnivariatePolynomial(GCD(Q,Derivative(Q,x)));
+
+		if My_Degree(state) eq 0 then
+			state:=ConstantCoefficient(state);
+		end if;
+
+		T:=[];
+
+	end while;
+
+		Rx<x>:=PolynomialRing(R);	
+		Q:=UnivariatePolynomial(Q);
+		Q:=Rx!Q;
+		
+	return Q;
+
+end function;
+
+
+function sz(f,g)
+	//Input: polynomials f,g
+	
+	//Computes the resultant Res_y(f(y),g(x-y)).
+
+
+	Z:=Integers();
+	Zw<w>:=PolynomialRing(Z);
+	f:=Zw!f;
+	g:=Zw!g;
+
+	R:=CoefficientRing(f);
+	n:=Degree(f);
+	Rxy<x,y>:=PolynomialRing(R,2);
+
+
+	First:=Rxy!Evaluate(f,y);
+	Second:=Rxy!Evaluate(g,(x-y));
+
+	Res:=Resultant(First,Second,y);
+	Res:=UnivariatePolynomial(Res);
+
+	return Res;
+
+end function;
+
+
+
+function mz(d,f)
+	//Input:  polynomial f, integer d
+	//Output:  the polynomial whose roots are equal to the roots of f multiplied by the integer d.
+
+	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+	f:=Zx!f;
+
+	n:=Degree(f);
+	
+	if d eq 0 then
+
+		return x^n;
+	end if;
+
+	//Need to evaluate f at y/d so temporarily change polynomial ring so that I'm over the rationals.
+
+	Q:=Rationals();
+	Qy<y>:=PolynomialRing(Q);
+	f:=Qy!f;
+
+	goal:=(d^n)*Evaluate(f,y/d);
+	goal:=Zx!goal;
+
+	return goal;
+
+end function;
+
+
+
+function pr(k,u)
+
+	//Input: Positive integer k, monic polynomial u such that u(x)=r(x)^k for some unknown monic r(x)
+
+	//Output:  r(x)
+
+	if k eq 1 then
+		return u;
+	end if;
+
+	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+	u:=Zx!u;
+
+	t:=u div GCD(u,Derivative(u));
+	r:=t;
+	s:=u;
+
+	while Degree(r) lt Degree(u)/k do
+		s:=s/(t^k);
+		s:=Zx!s;		
+
+		t:=GCD(s,t);
+		r:=t*r;
+
+	end while;
+
+	return r;
+
+end function;
+
+
+function dp(f)
+
+	//computes the familiar resolvent of degree n*(n-1)/2, corresponding to the invariant T = x_1 + x_2 that is stabilized by S_2 x S_{n-2}. 
+
+	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+	f:=Zx!f;
+
+	First:=sz(f,f);
+	Second:=mz(2,f);
+
+	First:=Zx!First;
+	Second:=Zx!Second;
+
+	return pr(2,Zx!(First/Second));
+
+end function;
+
+
+
+function lr2(f,a,b)
+
+	//lr2(f,1,2) computes the resolvent of degree n*(n-1), corresponding to T = x_1 + 2*x_2 that is stabilized by S_1 x S_1 x S_{n-2}.
+	// It should not matter what the last two arguments are, as long as they are non equal integers.  
+
+	if a eq b then
+		error "Error:  Last two arguments should not be equal.";
+	end if;
+
+	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+
+ 	R:= sz(mz(a,f),mz(b,f))/mz(a+b,f);
+
+	return (Zx!R);
+
+end function;
+
+
+
+
+function tp(f) 
+
+	//computes the resolvent of degree n*(n-1)*(n-2)/6, corresponding to T = x_1 + x_2 + x_3 that is stabilized by S_3 x S_{n-3}.
+
+	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+
+
+	R:= pr(3,sz(dp(f),f)/lr2(f,1,2));	
+
+	return (Zx!R);
+
+end function;
+
+
+
+function lr112(f)
+
+	// computes the resolvent of degree n*(n-1)*(n-2)/2, corresponding to T = x_1 + x_2 + 2*x_3 that is stabilized by S_2 x S_1 x S_{n-3}.
+
+
+ 	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+
+	R:= sz(dp(f),mz(2,f))/lr2(f,1,3);
+
+	return (Zx!R);
+
+end function;
+
+
+function qp(f) 
+
+	//computes the resolvent of degree n*(n-1)*(n-2)*(n-3)/24, corresponding to T = x_1 + x_2 + x_3 + x_4 that is stabilized by S_4 x S_{n-4}.
+
+	Z:=Integers();
+	Zx<x>:=PolynomialRing(Z);
+
+	R:=pr(4,sz(tp(f),f)/lr112(f));
+
+	return (Zx!R);
+
+end function;
+
+
+
+function tally(seq)
+
+	set := Seqset(seq);
+	multiset:=SequenceToMultiset(seq);
+	return Sort([<s,Multiplicity(multiset,s)>: s in set]);
+
+end function;
+
+
+/////Below functions also used for relative resolvents
+
+function NeedResolvent(W,H,Candidates)
+        if #Candidates eq 1 then
+"NeedResolvent: only one candidate left.";
+		return false;
+	end if;
+
+	
+vprintf GaloisTower,3: "   Need resolvent of degree %o ?",#W/#H;
+        if #W/#H gt 2500 then // this will be hard to factor
+vprint GaloisTower,3: " -- no, degree",#W/#H,"is too large.";
+               return false;
+        end if;
+
+	a,b,c:=CosetAction(W,H);
+
+	//Figure out orbitlengths for first candidate.  This will be the basis of comparison.
+
+	G1:=Candidates[1];
+
+	phi_G1:=a(G1);
+
+	Orbb1:=Orbits(phi_G1);
+	Orb_lengths1:=[#r: r in Orbb1];
+	Orb_lengths1:=Set(tally(Orb_lengths1));
+//"";
+//1,"Orb_lengths",Orb_lengths1;
+	for i in [2..#Candidates] do
+
+		G:=Candidates[i];
+		phi_G:=a(G);
+
+		Orbb:=Orbits(phi_G);
+		Orb_lengths:=[#r: r in Orbb];
+	
+		Orb_lengths:=Set(tally(Orb_lengths));
+//i,"Orb_lengths",Orb_lengths;
+		if Orb_lengths ne Orb_lengths1 then
+vprint GaloisTower,3: " -- yes.";
+			return true;
+		end if;
+
+	end for;
+
+vprint GaloisTower,3: " -- no.";
+	return false;
+
+end function;
+
+
+
+function dpFact(phi)
+
+	K:=CoefficientRing(phi);
+	p:=Prime(K);
+
+	psi:=dp(phi);
+
+	state:=IsitSquareFree(psi);
+
+	while (state eq false) do
+		phi:=Tschirnhausen(phi);
+		psi:=dp(phi);
+		state:=IsitSquareFree(psi);
+
+	end while;
+
+	
+	FF:=pFactorDegrees(p,psi);
+
+	return Set(tally(FF));
+
+end function;
+
+
+
+function lrFact(phi)
+	//Resolvent factorization for the lr2 resolvent described above.
+vprint GaloisTower, 3: "    Constructing resolvent";
+
+	K:=CoefficientRing(phi);
+	p:=Prime(K);
+
+	psi:=lr2(phi,1,2);
+
+	state:=IsitSquareFree(psi);
+	while (state eq false) do
+vprint GaloisTower, 3: "    -- not squarefree: Tschirnhausen!";
+		phi:=Tschirnhausen(phi);
+		psi:=lr2(phi,1,2);
+		state:=IsitSquareFree(psi);
+
+	end while;
+
+	
+	FF:=pFactorDegrees(p,psi);
+
+	return Set(tally(FF));
+
+end function;
+
+
+
+function tpFact(phi)
+
+	K:=CoefficientRing(phi);
+	p:=Prime(K);
+
+	psi:=tp(phi);
+
+	state:=IsitSquareFree(psi);
+
+	while (state eq false) do
+		phi:=Tschirnhausen(phi);
+		psi:=tp(phi);
+		state:=IsitSquareFree(psi);
+
+	end while;
+	
+	FF:=pFactorDegrees(p,psi);
+
+	return Set(tally(FF));
+
+end function;
+
+
+
+function  S3_OrbitLengthTest(G,phi,ResolventFactorList)
+
+	//G is a candidate
+	//tp(f) computes the resolvent
+
+
+	n:=Degree(phi);
+	Sn:=Sym(n);
+
+	H:=DirectProduct(Sym(3),Sym(n-3));   //S_3 x S_{n-3}
+	m:=Order(Sn)/Order(H);
+	m:=Integers()!m;
+
+	a,b,c:=CosetAction(Sn,H);
+
+	phi_G:=a(G);
+
+	Orbb:=Orbits(phi_G);
+	Orb_lengths:=[#r: r in Orbb];
+	
+	Orb_lengths:=Set(tally(Orb_lengths));
+
+	return Orb_lengths eq ResolventFactorList;
+
+
+end function;
+
+
+function lr_OrbitLengthTest(G,phi,ResolventFactorList)
+
+	//G is a candidate
+	
+	n:=Degree(phi);
+	Sn:=Sym(n);
+
+	H:=DirectProduct(Sym(1),DirectProduct(Sym(1),Sym(n-2)));   //S_1 x S_1 x S_{n-2}
+	m:=Order(Sn)/Order(H);
+	m:=Integers()!m;
+
+	a,b,c:=CosetAction(Sn,H);
+
+	phi_G:=a(G);
+
+	Orbb:=Orbits(phi_G);
+	Orb_lengths:=[#r: r in Orbb];
+	
+	Orb_lengths:=Set(tally(Orb_lengths));
+
+	return Orb_lengths eq ResolventFactorList;
+
+end function;
+
+
+
+function LRFact(phi)
+
+	//Resolvent factorization for the lr112 resolvent described above.
+
+	K:=CoefficientRing(phi);
+	p:=Prime(K);
+
+	psi:=lr112(phi);
+	state:=IsitSquareFree(psi);
+
+	while (state eq false) do
+		phi:=Tschirnhausen(phi);
+		psi:=lr112(phi);
+		state:=IsitSquareFree(psi);
+
+	end while;
+
+	
+	FF:=pFactorDegrees(p,psi);
+
+	return Set(tally(FF));
+
+end function;
+
+
+function LR_OrbitLengthTest(G,phi,ResolventFactorList)
+
+	//G is a candidate
+	
+	n:=Degree(phi);
+	Sn:=Sym(n);
+	
+	H:=DirectProduct(Sym(2),DirectProduct(Sym(1),Sym(n-3)));   //S_2 x S_1 x S_{n-3}
+	a,b,c:=CosetAction(Sn,H);
+
+	phi_G:=a(G);
+
+	Orbb:=Orbits(phi_G);
+	Orb_lengths:=[#r: r in Orbb];
+	
+	Orb_lengths:=Set(tally(Orb_lengths));
+
+	return Orb_lengths eq ResolventFactorList;
+
+end function;
+
+
+function qpFact(phi)
+
+	//Resolvent factorization for qp resolvent mentioned above
+
+	K:=CoefficientRing(phi);
+	p:=Prime(K);
+
+	psi:=qp(phi);
+
+	state:=IsitSquareFree(psi);
+
+	while (state eq false) do
+		phi:=Tschirnhausen(phi);
+		psi:=qp(phi);
+		state:=IsitSquareFree(psi);
+
+	end while;
+
+	
+	FF:=pFactorDegrees(p,psi);
+
+	return Set(tally(FF));
+
+end function;
+
+
+function qp_OrbitLengthTest(G,phi,ResolventFactorList)
+
+	//G is a candidate
+	
+	n:=Degree(phi);
+	Sn:=Sym(n);
+	
+	H:=DirectProduct(Sym(4),Sym(n-4));  //S_4 x S_{n-4}
+	a,b,c:=CosetAction(Sn,H);
+
+	phi_G:=a(G);
+
+	Orbb:=Orbits(phi_G);
+	Orb_lengths:=[#r: r in Orbb];
+	
+	Orb_lengths:=Set(tally(Orb_lengths));
+
+	return Orb_lengths eq ResolventFactorList;
+
+end function;
+

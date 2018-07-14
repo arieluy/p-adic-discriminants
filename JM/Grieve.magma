@@ -1,0 +1,1819 @@
+function Swap(A,B)
+
+	return B,A;
+
+end function;
+
+
+function Difference_XGCD(m,n)
+
+//Input:  Two positive integers m,n
+
+//Output: returns integer g and natural numbers x and y such that g=gcd(m,n) and g=xm-yn.
+
+	g,x,y:=XGCD(m,n);
+
+	state:=(x gt 0) and (y lt 0);
+
+	if state then
+		return x, -y;
+	end if;
+
+	while (state eq false) do
+		
+		x:=x+n;
+		y:=y-m;
+
+		state:=(x gt 0) and (y lt 0);
+
+	end while;
+	
+	return x, -y;
+
+end function;
+
+
+function Segmental_Inertia(A)
+
+	//A is already in ResidueClassField's PolynomialRing
+
+	ff:=Factorization(A);
+	degs:=[Degree(ff[i][1]): i in [1..#ff]];
+
+	f:=LCM(degs);
+
+	return f;
+
+end function;
+
+
+function UnityIndex(K,ei)
+
+	//Finds [K(zeta_ei):K], i.e. smallest natural number f so that ei divides (-1 +q^f).
+
+	V,n:=ResidueClassField(K);
+	q:=#V;
+
+	f:=1;
+
+	state:=IsDivisibleBy(-1 + q^f, ei);
+
+	while state eq false do
+		f:=f+1;
+		state:=IsDivisibleBy(-1 + q^f, ei);
+	end while;
+
+
+	return f;
+
+end function;
+
+
+function My_SubField(T,m)
+
+	phi:=DefiningPolynomial(T);
+	n:=Degree(phi);
+
+	if false eq IsDivisibleBy(n,m) then
+		error "Error: m does not divide the degree of T.";
+	end if;
+
+	C:=ConstantCoefficient(phi);
+
+	U:=BaseRing(T);
+
+	Ux<x>:=PolynomialRing(U);
+
+	psi:=x^m + C;
+
+	return ext<U|psi>;
+
+end function;
+
+
+
+function MyIsConjugate(H,K:S:=0)
+
+	// W:=Galois_Starting_Group(phi);
+	//MyIsConjugate(Alt(14),CyclicGroup(14):S:=W);
+
+	if Degree(K) ne Degree(H) then
+		error "Error:  Inputted Groups have different Degrees";
+	end if;
+
+
+	if Type(S) eq RngIntElt then
+		n:=Degree(H);
+		return IsConjugate(Sym(n),H,K);
+	end if;
+
+	return IsConjugate(S,H,K);
+
+	
+end function;
+
+
+
+function ChangeGroupDegree(G,n)
+
+//INput:  A permuation group G and a natural number n.
+
+//Output:  A subgroup of Sn that is isomorphic to G.
+
+	if Degree(G) eq n then
+		return G;
+	end if;
+
+	_,Grp:=RegularRepresentation(G,sub<G|>);
+
+	if Degree(Grp) eq n then
+
+		return Grp;
+
+	else
+		
+		T:=TransitiveGroups(n);
+		S:=[t: t in T| (Order(t) eq Order(G))];
+		state:=false;
+		i:=1;
+
+		if IsEmpty(S) then
+			return "fail";
+		end if;
+
+		while state eq false do
+			Candidate:=S[i];
+			state:=IsIsomorphic(G,Candidate);
+			i:=i+1;
+		end while;
+
+		return Candidate;
+
+	end if;
+
+
+end function;
+
+
+
+
+function OptimizedUnramifiedExtensions(K,f)
+//Input: K is an unramified extension of Qp or Zp, f is a natural number.
+
+//Returns a unramified extension L of K of degree f in absolute representation (that is as an extension over Zp or Qp) and a map from K to L.
+
+	F:=InertiaDegree(K);
+	Qp:=BaseRing(K);
+
+	L:=UnramifiedExtension(Qp,f*F);
+
+	rho:=MinimalPolynomial(K.1);
+	Lx<x>:=PolynomialRing(L);
+	rho:=Lx!rho;
+	
+	gamma_prime:=Roots(rho:Max:=1)[1][1];
+
+	omega:=map<K->L | x:-> &+[(gamma_prime)^(i-1) *Coefficient(x,i): i in [1..F]]>;
+
+	return L,omega;
+
+end function;
+
+
+
+function Make_Cyclotomic(K)
+//Input:  K is an unramified extension of Qp or Zp.
+
+//Returns:  The cyclotomic Unramified Extension L of Qp (Zp) so that [L:Qp]=[K:Qp] and a map tau from K to L.
+
+	f:=InertiaDegree(K);
+	Qp:=BaseRing(K);
+	L:=CyclotomicUnramifiedExtension(Qp,f);
+
+	rho:=MinimalPolynomial(K.1);
+	Lx<x>:=PolynomialRing(L);
+	rho:=Lx!rho;
+
+	gamma_prime:=Roots(rho:Max:=1)[1][1];
+
+	tau:=map<K->L | x:-> &+[(gamma_prime)^(i-1) *Coefficient(x,i): i in [1..f]]>;
+
+	return L,tau;
+
+end function;  
+
+
+function IsThereaU(W)
+
+	if true eq IsUnramified(W) then
+		a:=false eq IsTotallyRamified(W);
+	else
+		while false eq IsUnramified(W) do
+			W:=BaseRing(W);
+		end while;
+
+		a:=false eq IsTotallyRamified(W);
+	end if;
+
+	return a;
+
+end function;
+
+
+function RecoverR(T)
+
+	if true eq IsThereaU(T) then
+		U:=BaseRing(T);
+		p:=Prime(T);
+		h:=DefiningPolynomial(T);
+		c:=ConstantCoefficient(h);
+		w:=-c div p;
+
+		V,n:=ResidueClassField(U);
+
+		if Log(n(w)) eq 0 then
+			r:=0;
+		else
+			r:=Log(n(w))/Log(V.1);
+		end if;
+	else
+		p:=Prime(T);
+		h:=DefiningPolynomial(T);
+		c:=ConstantCoefficient(h);
+		w:=-c div p;
+		Zp:=PrimeRing(T);
+		q:=Precision(Zp);
+
+		V,n:=ResidueClassField(Zp);
+
+		b:=(PrimitiveElement(V)@@n)^(p^q);
+
+
+		if Log(n(w)) eq 0 then
+			r:=0;
+		else
+			r:=Log(n(w))/Log(n(b));  //Denominator should be one.  Drop it?
+			
+		end if;
+	end if;
+	
+	return r;
+
+end function;
+
+
+function ChangeT(t)
+
+	if true eq IsThereaU(t) then
+
+		U:=BaseRing(t);
+			
+		e:=RamificationIndex(t);
+		
+		r:=RecoverR(t);
+		r:=Integers()!r;
+
+		pi:=Prime(t);
+
+		Ux<x>:=PolynomialRing(U);
+		h:=x^e - pi*(U.1)^r;	
+
+		T:=TotallyRamifiedExtension(U,h);
+	else
+		e:=RamificationIndex(t);
+
+		Zp:=PrimeRing(t);
+		p:=Prime(Zp);
+		q:=Precision(Zp);
+
+		r:=RecoverR(t);
+		r:=Integers()!r;
+
+		pi:=p;
+
+		V,n:=ResidueClassField(Zp);
+		b:=(PrimitiveElement(V)@@n)^(p^q);
+
+		Zpx<x>:=PolynomialRing(Zp);
+		h:=x^e - pi*(b)^r;
+
+		T:=TotallyRamifiedExtension(Zp,h);
+
+	end if;
+
+	return T;
+
+end function;
+
+
+
+function EqualDegree_Case(T1,T2)
+
+	e:=RamificationIndex(T1);
+
+	gamma1:=ConstantCoefficient(DefiningPolynomial(T1));
+	gamma2:=ConstantCoefficient(DefiningPolynomial(T2));
+
+	U:=BaseRing(T1);
+	
+	V,n:=ResidueClassField(U);
+	Vz<z>:=PolynomialRing(V);
+
+
+	tau:=z^e-n(gamma2/gamma1);
+	ff:=Factorization(tau);
+	degs:=[Degree(ff[i][1]): i in [1..#ff]];
+
+	f:=LCM(degs);
+
+	return UnramifiedExtension(T1,f);
+
+end function;
+
+
+function CoPrimeDegree_Case(T1,T2)
+	g:=DefiningPolynomial(T1);
+	h:=DefiningPolynomial(T2);
+
+	c:=ConstantCoefficient(h);
+	d:=ConstantCoefficient(g);
+
+	n:=Degree(g);
+	m:=Degree(h);
+
+	r,a,b:=Xgcd(m,n);
+
+	Tx<x>:=PolynomialRing(T1);
+
+	Cons:=(c/d)^b;
+	ChangePrecision(~Cons,Precision(T1));
+	Cons:=T1!Cons;
+	
+
+	return TotallyRamifiedExtension(T1,x^m - T1.1*Cons);
+	
+end function;
+
+
+function Restructure_Tower(C,a)
+
+	if a eq 1 then
+
+		U:=C;
+
+		if Degree(U) eq 1 then
+			return BaseRing(U);
+		end if;
+
+		T1:=BaseRing(U);
+		K:=BaseRing(T1);
+		Zp:=PrimeRing(K);
+		e:=RamificationIndex(T1);
+
+		pi_K:=UniformizingElement(K);
+
+		psi:=DefiningPolynomial(T1);
+		gamma1:=-ConstantCoefficient(psi) div pi_K;
+
+		if InertiaDegree(K,Zp) gt 1 then
+			
+			U_prime, omega:=OptimizedUnramifiedExtensions(K,InertiaDegree(U));			
+			Uy<y>:=PolynomialRing(U_prime);			
+			
+			gamma1_prime:=omega(gamma1);
+			
+			pi_U_prime:=UniformizingElement(U_prime);
+
+			phi:=y^e -gamma1_prime*pi_U_prime;
+			phi:=Uy!phi;
+
+			T:=TotallyRamifiedExtension(U_prime,phi);
+
+			return T;
+
+		else  //Inertia Degree eq 1.
+			new_inertia:=InertiaDegree(U);
+			U_prime:=UnramifiedExtension(Zp,new_inertia);
+			Uy<y>:=PolynomialRing(U_prime);
+
+			gamma_prime:=U_prime!gamma1;
+
+			pi_U_prime:=UniformizingElement(U_prime);
+
+			phi:=y^e - gamma_prime*pi_U_prime;
+			phi:=Uy!phi;
+
+			T:=TotallyRamifiedExtension(U_prime,phi);
+
+			return T;
+
+		end if;
+
+	end if;  //omega in both cases is a map from K to the base ring of T.
+
+	if a eq 2 then
+			
+		T2:=C;
+		T1:=BaseRing(T2);
+		K:=BaseRing(T1);
+		
+		deg:=RamificationIndex(T1)*RamificationIndex(T2);
+		deg:=Integers()!deg;
+		Cons:=Norm(ConstantCoefficient(DefiningPolynomial(T2)));
+
+		Kx<x>:=PolynomialRing(K);
+		T:=TotallyRamifiedExtension(K, x^deg + Cons);
+
+	end if;
+
+	if a eq 3 then
+		V:=C;
+		T1_prime:=BaseRing(V);
+		S1_prime:=BaseRing(T1_prime);
+		U_prime:=BaseRing(S1_prime);
+
+		e1:=RamificationIndex(V);
+		e2:=RamificationIndex(T1_prime);
+		e3:=RamificationIndex(S1_prime);
+
+		C0:=ConstantCoefficient(DefiningPolynomial(V));
+		Cons:=Norm(Norm(C0));
+
+		Uz<z>:=PolynomialRing(U_prime);
+
+		T:=TotallyRamifiedExtension(U_prime, z^(e1*e2*e3) + Cons);
+		
+	end if;
+
+	return T;
+
+end function;
+
+
+function Third_Case(T1,T2)
+
+	e1:=Degree(DefiningPolynomial(T1));
+	e2:=Degree(DefiningPolynomial(T2));
+
+	K:=BaseRing(T1);
+	pi_K:=UniformizingElement(K);
+
+	m:=GCD(e1,e2);
+	q:=e1/m;
+	r:=e2/m;
+
+	q:=Integers()!q;
+	r:=Integers()!r;
+
+	if q eq 1 then
+		T1,T2:=Swap(T1,T2);
+		e1,e2:=Swap(e1,e2);
+		q,r:=Swap(q,r);
+	end if;
+
+	gamma1:=-ConstantCoefficient(DefiningPolynomial(T1)) div pi_K;
+	gamma2:=-ConstantCoefficient(DefiningPolynomial(T2)) div pi_K;
+
+	Zp:=PrimeRing(T1);
+
+	S1:=My_SubField(T1,m);
+	S2:=My_SubField(T2,m);
+
+	pi_S1:=UniformizingElement(S1);		
+	pi_S2:=UniformizingElement(S2);
+
+	U:=EqualDegree_Case(S1,S2);
+	S1_prime:=Restructure_Tower(U,1);
+	pi_S1_prime:=UniformizingElement(S1_prime);
+
+	U_prime:=BaseRing(S1_prime);
+	pi_U_prime:=UniformizingElement(U_prime);
+
+	//To move things from K to U_prime
+
+	f:=InertiaDegree(U_prime)/InertiaDegree(K);
+	f:=Integers()!f;
+	UU, omega:=OptimizedUnramifiedExtensions(K,f);	//omega maps K to UU;
+	eps:=map<UU->U_prime|x:->&+[(U_prime.1)^(i-1)*Coefficient(x,i): i in [1..Degree(UU)]]>;  //compensate for magma not realizing U_prime=UU
+	My_EmbeddingMap:=omega*eps;	//Mapping from: RngPad: K to RngPad: U_prime  
+
+
+	//Find gamma1_prime for T1/S1
+	
+	RHS_1:=(-1)^(m+1)*gamma1*pi_K div Norm(pi_S1);
+	RHS_1:=Integers()!RHS_1;
+
+	if RHS_1 eq 1 then
+		gamma1_prime:=1;
+	elif (RHS_1 eq -1) and (IsOdd(m) eq true) then
+		gamma1_prime:=-1;
+	else
+		VK,nk:=ResidueClassField(K);
+		Vx<x>:=PolynomialRing(VK);
+		tau_1:=x^m - nk(RHS_1);
+		tau_1:=Vx!tau_1;
+
+		state:=Roots(tau_1:Max:=1)[1][1];
+		gamma1_prime:=(state @@ nk);
+	end if;
+
+
+	//Form T1_prime as extension of S1_prime
+
+	Sz<z>:=PolynomialRing(S1_prime);
+	T1_prime:=TotallyRamifiedExtension(S1_prime, z^q - gamma1_prime*pi_S1_prime);
+
+	if r eq 1 then
+		return T1_prime, 2;
+	end if;
+
+
+	//Find gamma2_prime for T2/S2
+
+	RHS_2:=(-1)^(m+1)*gamma2*pi_K div Norm(pi_S2);
+	RHS_2:=Integers()!RHS_2;
+
+	if RHS_2 eq 1 then
+		gamma2_prime:=1;
+	elif (RHS_2 eq -1) and (IsOdd(m) eq true) then
+		gamma2_prime:=-1;
+	else
+		VK,nk:=ResidueClassField(K);
+		Vx<x>:=PolynomialRing(VK);
+		tau_2:=x^m - nk(RHS_2);
+		tau_2:=Vx!tau_2;
+
+		state:=Roots(tau_2:Max:=1)[1][1];
+		gamma2_prime:=(state @@ nk);
+	end if;
+
+
+	//Write pi_S2 in terms of pi_S1_prime.
+
+	Cons:=My_EmbeddingMap(gamma2*pi_K);
+	Cons:=S1_prime!Cons;
+	temp:=z^m - Cons;
+
+	pi_S:=Roots(temp:Max:=1)[1][1];
+
+	//Form T2_prime as extension of S1_prime	
+
+	gamma2_prime:=My_EmbeddingMap(gamma2_prime);
+	gamma2_prime:=S1_prime!gamma2_prime;
+	ChangePrecision(~pi_S, Precision(S1_prime));
+
+	T2_prime:=TotallyRamifiedExtension(S1_prime, z^r -gamma2_prime*pi_S);
+
+	T:=CoPrimeDegree_Case(T1_prime,T2_prime);
+	a:=3;	
+
+	return T,a;
+
+end function;
+
+
+function PairComposite(T1,T2)
+
+	p1:=Prime(T1);
+	p2:=Prime(T2);
+
+	p1:=Integers()!p1;
+	p2:=Integers()!p2;
+
+	if p1 ne p2 then
+		error "Extensions are not defined over the same p-adic ring";
+	end if;
+
+	K:=BaseRing(T1);
+	Zp:=PrimeRing(T1);
+
+	n:=Degree(DefiningPolynomial(T1));
+	m:=Degree(DefiningPolynomial(T2));
+
+	Comp:=0; //should never happen, just here to guarantee it runs.
+
+	if m eq n then
+		Comp:= EqualDegree_Case(T1,T2);
+		a:=1;
+		Comp:=Restructure_Tower(Comp,a);
+		return Comp;
+	end if;
+
+	if GCD(m,n) eq 1 then
+		Comp:=CoPrimeDegree_Case(T1,T2);
+		a:=2;
+		Comp:=Restructure_Tower(Comp,a);
+		return Comp;
+	end if;
+
+	if (GCD(m,n) gt 1 and m ne n) then
+		Comp,a:=Third_Case(T1,T2);
+		Comp:=Restructure_Tower(Comp,a);
+		return Comp;
+	end if;
+
+	return Comp;
+
+end function;
+
+
+function TameCompositum(T)
+//Input a list of Tamely Ramified Extensions over a common local field K.
+//Output Composite of all the extensions, taken two at a time.
+
+	if #T eq 1 then
+		return T[1];
+	end if;
+
+	if #T eq 2 then
+		return PairComposite(T[1],T[2]);
+	end if;
+
+
+	Zp:=PrimeRing(T[1]);
+
+	if #T gt 2 then
+		C:=PairComposite(T[1],T[2]);
+		count:=2;		//number of extensions used
+
+		while count lt #T do
+			Tame_ext:=T[count+1];
+			Zp:=PrimeRing(Tame_ext);
+
+			new_inertia:=InertiaDegree(Tame_ext,Zp);   //under Tame_ext;
+			old_inertia:=InertiaDegree(C,Zp);         //under C, i.e. from previous loop
+			
+			if new_inertia lt old_inertia then
+				e:=RamificationIndex(Tame_ext);
+
+				U_prime:=BaseRing(C);
+				K:=BaseRing(Tame_ext);
+
+				pi_U_prime:=UniformizingElement(U_prime);
+				pi_K:=UniformizingElement(K);
+
+				psi:=DefiningPolynomial(Tame_ext);
+				Uy<y>:=PolynomialRing(U_prime);
+
+				gamma1:=-ConstantCoefficient(psi) div pi_K;
+
+				// Move gamma1 to U_prime
+				
+				f:= old_inertia / new_inertia;
+				f:=Integers()!f;
+				UU, omega:=OptimizedUnramifiedExtensions(K,f);
+				tau:=map<UU->U_prime|x:->&+[(U_prime.1)^(i-1)*Coefficient(x,i): i in [1..Degree(UU)]]>;
+
+				gamma1_prime:=omega(gamma1);  //move to UU.
+
+				gamma1_prime:=tau(gamma1_prime);  //move to U_prime.
+
+				phi:=y^e -gamma1_prime*pi_U_prime;
+				phi:=Uy!phi;
+
+				TT:=TotallyRamifiedExtension(U_prime,phi);
+			else
+				TT:=Tame_ext;
+
+			end if;
+
+			C:=PairComposite(C,TT);
+			count:=count+1;
+
+		end while;
+
+		return C;
+
+	end if;
+
+end function;
+
+
+
+function TestPair(T1,T2)
+
+	C:=Composite(T1,T2);
+	e1:=RamificationIndex(C,PrimeRing(T1));
+	f1:=InertiaDegree(C,PrimeRing(T1));
+
+	P:=PairComposite(T1,T2);
+	e2:=RamificationIndex(P,PrimeRing(T1));
+	f2:=InertiaDegree(P,PrimeRing(T1));
+
+	differ:=(e1-e2)^2 + (f1-f2)^2;
+
+	return differ;
+
+
+end function;
+
+
+
+function Max_Tame_Subextension(phi)
+
+//An implementation of Greve-Pauli Theorem 9.1.
+//That is a function that given an Eisenstein polynomial returns the maximal tamely ramified subfield of its splitting field.
+
+//Input: an Eisenstein Polynomial of degree n=e0*p^w over Qp or an unramified extension of Qp
+
+	if IsEisenstein(phi) eq false then
+		error "Polynomial is not Eisenstein.";
+	end if;
+
+	K:=CoefficientRing(phi);		
+	
+	n:=Degree(phi);
+	p:=Prime(PrimeRing(K));
+
+	m:=Valuation(n,p);
+	e0:=n div p^m;
+	e0:=Integers()!e0;
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	Lx<x>:=PolynomialRing(L);
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n); //Ramification Polynomial
+	rho:=Lx!rho;
+	ChangePrecision(~rho,Precision(L));
+
+	ramification_polygon := NewtonPolygon(rho);
+
+	vertices := LowerVertices(ramification_polygon);	
+	slopes := Slopes(ramification_polygon)[1..#vertices-1];
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	a:=[Integers()!vertices[i][1]: i in [1..#vertices]];	//list of x-coordinates of vertices
+	b:=[Integers()!vertices[i][2]: i in [1..#vertices]];	//list of y-coordinates of vertices
+	
+	if e0 eq 1 then
+		l:=#slopes;
+	else  //e0>1
+		l:=#slopes-1;		//l+1 st segment is horizontal on x-axis
+	end if;
+
+	s:=[];
+
+	for j in [1..(l+1)] do
+		s[j]:=Valuation(a[j],p);
+	end for;
+
+	pi_L:=UniformizingElement(L);
+	
+	e:=[];
+	h:=[];
+
+	for i in [1..l] do
+		e[i]:=Denominator(-slopes[i]);		//list of (negative) slope denominators
+		h[i]:=Numerator(-slopes[i]);		//list of (negative) slope numerators
+	end for;
+
+	gamma:=[];
+	
+	A:=[];						//Residual Polynomials of segments
+	f:=[];						//Segmental Inertia of segments
+
+	RL,omega:=ResidueClassField(L);
+	Ry<y>:=PolynomialRing(RL);			//Polynomial Ring in variable y over Residue Class Field of L
+	
+	RK,sigma:=ResidueClassField(K);
+	Rs<r>:=PolynomialRing(RK);
+
+	for i in [1..l] do
+		di:=a[i+1]-a[i];
+		fin:=Integers()!(di/e[i]);
+		Ai:=Polynomial(Ry,[&+[omega(Coefficient(rho,j*e[i]+a[i]) div pi_L^(-j*h[i]+b[i]))*y^j: j in [0..fin]]]);
+		Ai:=Ry!Ai;
+		A[i]:=Ai;
+
+		f[i]:=Segmental_Inertia(A[i]);		
+	end for;
+
+	Indicess:=[UnityIndex(K,e0*e[i]): i in [1..l]];
+	F:=LCM(Flat([f,Indicess]));
+
+	I:=UnramifiedExtension(K,F);    
+
+	RI,tau:=ResidueClassField(I);
+	Rw<w>:=PolynomialRing(RI);
+
+	for i in [1..l] do
+
+		Ai:=A[i];
+		Ai:=Rs!Ai;			//Might be unnecessary, magma knows that RL=RK
+
+		Ai:=Rw!Ai;
+		gamma_i:=Roots(Ai:Max:=1);
+		gamma_i:=gamma_i[1][1];		//note gamma_i lives in RI
+		gamma_i:=(gamma_i @@ tau);	//find pre_image of gamma_i, this is what we want
+		Append(~gamma,gamma_i);
+
+	end for;
+
+	Iz<z>:=PolynomialRing(I);
+	phi_0:=ConstantCoefficient(phi);
+
+	//phi_0:=mi(phi_0);		//Moves (maps) phi_0 to I
+
+	Tame_extensions:=[]; 
+
+	for i in [1..l] do
+		
+		_, bi ,di:=Xgcd(h[i],e[i]);
+		vi:=e0 * p^(m-s[i]) + n +1;		
+
+		Ti:=TotallyRamifiedExtension(I, z^(e0*e[i]) - ((-1)^vi)* phi_0*gamma[i]^(bi*n) );
+		Append(~Tame_extensions,Ti);
+	end for;
+
+	Towe:=TameCompositum(Tame_extensions);
+
+	return Towe;	
+
+end function;
+
+
+
+function TameGaloisGenerators(T)
+
+	if false eq IsTamelyRamified(T) then
+		error "Error: Extension is not Tamely Ramified.";
+	end if;
+
+	U:=BaseRing(T);
+	Zp:=PrimeRing(T);
+	p:=Prime(T);
+	q:=p;
+	pi:=p;
+	
+	f:=InertiaDegree(U);
+	e:=RamificationIndex(T);
+
+	if false eq IsDivisibleBy(((q^f)-1),e) then
+		error "Error: Extension is not normal.";
+	end if;
+	
+	r:=RecoverR(T);
+	r:=Integers()!r;
+
+	k:=(r*(q-1))/e;
+
+	l:=(-1+q^f)/e;
+
+	k:=Integers()!k;
+	l:=Integers()!l;
+
+	state1:=U.1^k;	
+	state2:=U.1^l;	
+	
+	g1:=map<U->U|x:->x>;
+	g2:=map<U->U|y:->y^q>;
+	
+	h1:=map<T->T|x:->x*state2>;
+	h2:=map<T->T|y:->y*state1>;
+
+	s:=map<T->T|x:->&+[(h1(T.1))^(j-1)*(&+[(g1(U.1))^(i-1)*Coefficient(Coefficient(x,j),i): i in [1..f]]): j in [1..e]]>;
+	
+	t:=map<T->T|y:->&+[(h2(T.1))^(j-1)*(&+[(g2(U.1))^(i-1)*Coefficient(Coefficient(y,j),i): i in [1..f]]): j in [1..e]]>;
+
+	return s,t,r,k;
+
+end function;
+
+
+function Slope_of_Factor(phi)
+
+	NP:=NewtonPolygon(phi);
+
+	m:=Slopes(NP)[1];
+	return m;
+end function;
+
+
+
+function CompareSlopes(x,y)
+
+	m1:=Slope_of_Factor(x);
+	m2:=Slope_of_Factor(y);
+
+	return m1-m2;
+
+end function;
+
+
+function MakeEisenstein(phi)
+//Input:  a single variable polynomial phi.
+//Output:  if phi is Eisenstein, it is returned.  Otherwise, the extension (totally ramified) generated by phi is created and the DefiningPolynomial is returned.
+
+	if IsEisenstein(phi) then
+		return phi;
+	else
+		_,_,m:=Factorization(phi:Extensions:=true);
+		return DefiningPolynomial(m[1]`Extension);
+	end if;
+
+end function;
+
+
+
+function eltseq(a)
+  L :=[];
+  R := Parent(a);
+  F, m := ResidueClassField(R);
+  for v in [1..Precision(R)] do
+    b := m(a);
+    Append(~L,b);
+    a := (a-b@@m) div UniformizingElement(R);
+  end for;
+  return L;
+end function;
+
+
+function seqelt(R,L)
+
+  pi := UniformizingElement(R);
+  F, m := ResidueClassField(R);
+  return &+[L[i]@@m*pi^(i-1):  i in [1..#L]];
+
+end function;
+
+
+function IsSurjective_Finite(phi)
+	//phi is a map or it is a polynomial that we are treating as a map
+
+	if Type(phi) eq RngUPolElt then
+
+		K:=CoefficientRing(phi);
+
+		if Type(K) eq FldFin then
+			K:=Set(K);
+			n:=#K;
+
+			MyImage:={Evaluate(phi,k): k in K};
+			return K subset MyImage;
+			
+		else
+			error "Error: Polynomial must be over a finite field.";
+		end if;
+
+	end if;
+	
+	if Type(phi) eq Map then
+
+		K:=Domain(phi);
+		
+		if Type(K) eq FldFin then
+			K:=Set(K);
+			n:=#K;
+
+			MyImage:={phi(k): k in K};
+			return K subset MyImage;
+				
+		else
+			error "Error:  Map's Domain must be a finite field";
+		end if;
+
+	end if;
+
+	return 0; 
+
+end function;
+
+
+function Hasse_Herbrand(RamPolygon,lambda)
+
+	rho:=Polynomial(RamPolygon);
+	n:=Degree(rho);
+	L:=CoefficientRing(rho);
+	p:=Prime(PrimeRing(L));
+
+	m:=Valuation(n,p);
+	e0:=n div p^m;
+	e0:=Integers()!e0;
+
+	vertices:= LowerVertices(RamPolygon);     
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+	end if;
+
+	if e0 gt 1 then
+
+		Exclude(~vertices,<n,0>);//Throw out the point (n,0)
+
+	end if;
+
+	VTerms:={(1/n)*(vertices[i][2] + lambda*vertices[i][1]): i in [1..#vertices]};
+
+	return Min(VTerms);	
+
+end function;
+
+
+function reduce_poly(f)
+
+// f must be eisenstein
+//"reduce_poly in",f;
+  o := CoefficientRing(Parent(f));
+  n := Degree(f);
+  fseq := Eltseq(f);
+  j := Min([n*Valuation(o!n)] cat [n*(Valuation(o!i)+Valuation(fseq[i+1])-1)+i:i in [1..n-1]]);
+  prec := Ceiling((n+2*j+1)/n);  //Krasner bound
+  oo := ChangePrecision(o,prec);
+//"reduce_poly out",Polynomial(o,Polynomial(oo,f)); 
+  return Polynomial(o,Polynomial(oo,f)), prec; 
+end function;
+
+
+function MongeReduction(psi,KrasnerBound)
+
+	K:=CoefficientRing(psi);
+	Kx<x>:=PolynomialRing(K);
+	n:=Degree(psi);
+
+	L:=ext<K|psi>;
+	pi_L:=UniformizingElement(L);
+
+	alpha:=L.1;
+	Ly<y>:=PolynomialRing(L);
+
+	rho:=Evaluate(psi, alpha*y + alpha) div (alpha^n); //Ramification Polynomial
+	rho:=Ly!rho;
+	ChangePrecision(~rho,Precision(L));
+	
+	RamPolygon:=NewtonPolygon(rho);
+
+	vertices := LowerVertices(RamPolygon);	
+	slopes := Slopes(RamPolygon)[1..#vertices-1];
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	New_psi:=x^n;
+
+	for i in [0..(n-1)] do
+		C:=Coefficient(psi,i);
+		Cs:=eltseq(C);
+
+		m:=1;
+
+		while ( (n + n*Hasse_Herbrand(RamPolygon,m) - i) / n  ) lt KrasnerBound do
+
+			j:=(n + n*Hasse_Herbrand(RamPolygon,m) - i) / n;
+			
+			//if 0 eq ( (i-n*Hasse_Herbrand(RamPolygon,m)) mod n) then
+
+			if Denominator(j) eq 1 then
+
+				j:=Integers()!j;
+
+				if (-m) in slopes then
+
+					l:=Position(slopes,-m);
+					k:=vertices[l][1];
+
+					k:=Integers()!k;
+
+					RL,omega:=ResidueClassField(L);
+					Rz<z>:=PolynomialRing(RL);			//Polynomial Ring in variable y over Residue Class Field of L
+	
+					RK,sigma:=ResidueClassField(K);
+					Rs<r>:=PolynomialRing(RK);
+
+					dl:=vertices[l+1][1]-vertices[l][1];
+					fin:=Integers()!(dl/Denominator(m));
+		
+					A:=Polynomial(Rz,[&+[omega(Coefficient(rho,Integers()!(u*Denominator(m)+vertices[l][1])) div pi_L^(Integers()!(-u*Numerator(m)+vertices[l][2])))*z^u: u in [0..fin]]]);
+					A:=Rz!A;
+					A:=Rs!A;
+
+					//Sm:=(r^k)*A;
+					//Sm;
+
+					rho_m:=Evaluate(rho,alpha^m *y);
+					contalpha:=Min([Valuation(r): r in Eltseq(rho_m)]);
+
+					rho_m:=rho_m div alpha^contalpha;
+
+					Sm:=Rz!rho_m;
+
+					
+					if IsSurjective_Finite(Sm) then
+
+						Cs[j+1]:=0;			
+
+					end if;
+
+				else
+					Cs[j+1]:=0;
+				end if;
+
+			end if;
+
+			m:=m+1;
+
+		end while; 
+
+		New_psi:=New_psi + x^i * seqelt(K,Cs);
+
+	end for;
+
+	return New_psi;
+	
+end function;
+
+
+
+
+function FactorofDegree(phi,n)
+//Input:  a polynomial phi and a natural number n.
+//Output: a factor of phi that has degree n.  If such a factor doesn't exist, an error message is returned to the user.
+	n;
+
+	if IsIrreducible(phi) then		//might not need.  might slow it down
+		
+		if Degree(phi) eq n then
+			return phi;
+		else
+			error "Error: Polynomial is irreducible and doesn't have a factor of that degree.";
+		end if;
+	end if;
+
+	Fac:=Factorization(phi);
+	state:=false;
+	
+	for i in [1..#Fac] do
+		i;
+		candidate:=Fac[i][1];
+		D:=Degree(candidate);
+		D;		
+
+		if Degree(candidate) eq n then
+			return candidate;
+		end if;
+	end for;
+
+	error "Error:  Polynomial doesn't have a factor of that degree.";
+
+end function;
+
+
+function Oneslope_onefactor(R)
+
+//Input:  list of factors of ramification polynomial, each of which has a newton polygon that consists of one segment.
+
+//Output: list of factors of ramification polynomial so that there is one factor for each segment of the ramification polygon.
+
+	fin:=#R;
+
+	count:=1;
+
+	if fin eq count then
+		return R;
+	end if;
+
+	S:=[];		//will contain the slopes of the factors.
+
+	N:=[];		//will contain the new list of factors to be outputted	
+
+	for i in [1..#R] do
+		S[i]:=Slope_of_Factor(R[i]);
+	end for;
+
+	
+	while count le fin do
+
+		prod:=1;		
+		
+		state:=true;
+
+		while state eq true do
+			current:=R[count];
+			prod:=prod*current;
+
+			if count lt fin then
+				state:=S[count] eq S[count+1];
+			else
+				state:=false;
+			end if;
+
+			count:=count+1;
+			
+		end while;
+
+		Append(~N, prod);
+
+	end while;
+
+	return N;
+
+end function;				
+
+
+
+
+function RamificationPolygonFactors(phi)
+//Input:  An Eisenstein polynomial phi in K[x]
+
+//Output;  Factors of phi corresponding to the segments of the ramification polygon of phi.
+
+	K:=CoefficientRing(phi);		
+	n:=Degree(phi);
+	ChangePrecision(~phi,Precision(K));
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	Lx<x>:=PolynomialRing(L);
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n); //Ramification Polynomial
+	rho:=Lx!rho;
+	ChangePrecision(~rho,Precision(L));
+	
+	ramification_polygon := NewtonPolygon(rho);
+
+	vertices := LowerVertices(ramification_polygon);	
+vprint GaloisTower, 2:"Ramification polygon",vertices;
+	slopes := Slopes(ramification_polygon)[1..#vertices-1]; 
+
+
+	if vertices[1][1] eq 0 then
+		vertices:=vertices[2..#vertices];		//get rid of point with x-coordinate=0
+		slopes:=slopes[2..#slopes];			//get rid of segment with infinite slope
+	end if;
+
+	rho:=rho div x;
+
+	Facc:=Factorization(rho);
+	R:=[Facc[i][1]: i in [1..#Facc]];
+
+	Sort(~R,CompareSlopes);				//Reorder the factors by segment
+
+	if #slopes ne #R then
+
+		R:=Oneslope_onefactor(R);		//How I make the Ri's match up with the proper segments.
+	end if;
+
+
+	F:=[];						//Will  contain the factors of phi.
+
+
+	F1:=(x-alpha)*Evaluate(R[1],((x-alpha)/alpha))*alpha^(Degree(R[1]));
+	F[1]:=Lx!F1;
+
+	for i in [2..#slopes] do
+		Fi:=alpha^(Degree(R[i])) * Evaluate(R[i],((x-alpha)/alpha));
+		F[i]:=Lx!Fi;
+	end for;
+
+	return F;
+
+end function;
+
+
+
+function RamificationPolygonSubfields(phi:St:=0)
+//Input:  An Eisenstein polynomial phi in K[x].
+
+//Output:  The set {L_{l+1}, ... , L_1} of subfields of K[x]/(phi).  L_j's aren't ordered.
+
+	K:=CoefficientRing(phi);		
+	n:=Degree(phi);
+
+	phi:=reduce_poly(phi);
+	ChangePrecision(~phi,Precision(K));
+	
+	Kx<x>:=PolynomialRing(K);
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	F:=RamificationPolygonFactors(phi);
+	F_0:=[];   //Constant coefficients of F
+
+	for i in [1..#F] do
+		F_0[i]:=ConstantCoefficient(F[i]);
+	end for;
+
+	U:={};
+
+	for i in [1..(#F-1)] do
+		mu:= MinimalPolynomial(&*[F_0[j]: j in [1..i]]);	  //Compute the minimal polynomial mu in K[x] of Constant terms up to F_0[i]
+		mu:=Kx!mu;
+
+
+		if IsEisenstein(mu) then
+			mu:=reduce_poly(mu);
+			ChangePrecision(~mu,Precision(CoefficientRing(mu)));
+			U:=U join {ext<K|mu>};
+
+		else
+			_,_,m:=Factorization(mu:Extensions:=true);
+			U:=U join {m[1]`Extension};
+
+		end if;
+
+	end for;
+	
+
+	return U;
+
+end function;
+
+
+
+function RamificationPolygonTower(phi)
+
+//Input:  An Eisenstein polynomial phi in K[x].
+ 
+//Output:  The set {Li, ..., L1} such that the extension L=K[x]/(phi) is the tower of extensions L contains L1 contains ... contains Li contains K.
+
+	phi:=MakeEisenstein(phi);
+	K:=CoefficientRing(phi);		
+	n:=Degree(phi);
+
+	phi:=reduce_poly(phi);	
+	ChangePrecision(~phi,Precision(K));
+
+	Kx<x>:=PolynomialRing(K);
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+
+	F:=RamificationPolygonFactors(phi);
+
+	i:=#F -1;   
+
+	if i eq 0 then   
+		return [L];
+	end if;
+
+	H:=&*[F[j]: j in [1..i]]; 
+	H_0:= ConstantCoefficient(H);
+	//ChangePrecision(~H_0,Precision(K));
+
+	mu:=MinimalPolynomial(H_0);
+	mu:=Kx!mu;
+
+	//Form new extension E
+
+	if IsEisenstein(mu) then
+		mu:=reduce_poly(mu);
+		ChangePrecision(~mu,Precision(CoefficientRing(mu)));
+		E:=ext<K|mu>;
+	else
+
+		_,_,m:=Factorization(mu:Extensions:=true);
+		E:=m[1]`Extension;  //new extension
+	end if;
+
+	//reduce extension's defining polynomial
+
+	psi:=DefiningPolynomial(E);
+	psi:=reduce_poly(psi);
+
+	U:=BaseRing(E);
+	ChangePrecision(~psi,Precision(U));
+	E:=ext<U|psi>;
+	Ey<y>:=PolynomialRing(E);
+	
+	phi:= Ey!phi;
+
+	H:=FactorofDegree(phi,Degree(H));	//Could pick wrong factor.  Not likely.  Check this in case of error down the road.	
+
+	return [E] cat RamificationPolygonTower(H);
+
+end function;
+
+
+function TameGaloisGroup(T)
+
+	n:=Degree(T, PrimeRing(T));
+	
+	if RamificationIndex(T,PrimeRing(T)) eq 1 then
+		f:=n;
+
+		return CyclicGroup(f);
+	end if;
+
+
+	if IsWildlyRamified(T) then
+		error "Error:  Extension is not tame";
+	end if;
+
+
+	// Part 1: Get T in the right form
+
+	if IsThereaU(T) eq false then
+		T:=ChangeT(T);		//if I is degree 1, gets rid of it.
+		
+
+	else
+		V:=BaseRing(T);
+		f:=InertiaDegree(V);
+		
+		UU,mu:=Make_Cyclotomic(V);
+		psi:=DefiningPolynomial(T);
+
+		new_Coeffs:=[];
+
+		for i in [0..Degree(psi)] do
+			old_coeff:=Coefficient(psi,i);		
+			Append(~new_Coeffs, mu(old_coeff));					
+		end for;
+
+		Towe:=TotallyRamifiedExtension(UU,Polynomial(UU,new_Coeffs));
+		T:=ChangeT(Towe);
+		
+	end if;
+
+
+	e:=RamificationIndex(T);
+	f:=InertiaDegree(T,PrimeRing(T));
+
+	r:=RecoverR(T);
+	r:=Integers()!r;
+	q:=#ResidueClassField(PrimeRing(T));
+
+	
+
+	//Part 2:  Check Normality.  Call bool.
+
+	bool:=IsDivisibleBy(((q^f)-1),e) and IsDivisibleBy((r*(q-1)),e);
+
+	
+
+	//Part 3:  If bool is true.  
+
+	if bool and (f eq 1) then
+		return CyclicGroup(e);
+	end if;
+
+
+	if bool and (e eq 1) then
+
+		return CyclicGroup(f);
+	end if;
+
+
+	if bool then
+
+		G<x,y>:=Group<x,y|x^e, y^f=x^r, x*y=y*x^q>;  //x=s, y=t
+		F:=f;
+
+	end if;
+
+	
+	
+	//Part 4:  If bool is false, form new extension that is normal
+
+	if bool eq false then
+
+		g:=GCD(q^f -1, r*(q-1));
+
+		u:=1;
+		RHS:=(e*(q^f - 1)/g);
+		RHS:=Integers()!RHS;
+
+		state:=IsDivisibleBy(((q^(f*u))-1),RHS);
+
+		while state eq false do
+
+			u:=u+1;
+			state:=IsDivisibleBy(((q^(f*u))-1),RHS);
+			u; //Maybe get rid of?
+
+		end while;
+
+
+		s:=r*((q^(f*u))-1) div (q^f -1);
+		s:=Integers()!s;
+
+		G<x,y>:=Group<x,y|x^e, y^(f*u)=x^s, x*y=y*x^q>;
+		
+	end if;
+
+
+	PP,mp:=PermutationGroup(G);	
+
+	return ChangeGroupDegree(PP,n);
+
+
+end function;
+
+
+
+
+function  One_Segment(phi)
+
+//Input: phi Eisenstein in OK[x] of degree p^m such that the ramification polygon of phi has one segment.
+
+//Output:  Gal(phi) as a subgroup of AGL_m(F_p).
+
+	
+	if IsEisenstein(phi) eq false then
+		error "Polynomial is not Eisenstein.";
+	end if;
+
+	K:=CoefficientRing(phi);
+	n:=Degree(phi);
+		
+	if Type(K) eq FldPad then
+
+		error "Coefficient Ring must be a ring, not a field.";
+	end if;
+	
+	Fp:=ResidueClassField(PrimeRing(K));
+	p:=#Fp;
+	m:=Valuation(n,p);
+
+	Fq:=ResidueClassField(K);
+	q:=#Fq;
+
+	L:=ext<K|phi>;
+	alpha:=L.1;
+	Lx<x>:=PolynomialRing(L);
+	pi_L:=UniformizingElement(L);
+
+	rho:=Evaluate(phi,alpha*x + alpha) div (alpha^n); //Ramification Polynomial
+	rho:=Lx!rho;
+	ChangePrecision(~rho,Precision(L));
+
+	Segmentslope:=Slope_of_Factor(rho div x);
+
+	e:=Denominator(-Segmentslope);
+	h:=Numerator(-Segmentslope);
+
+	RL,omega:=ResidueClassField(L);
+	Ry<y>:=PolynomialRing(RL);
+
+	Fx:=PolynomialRing(Fq);
+
+	di:=n-1;
+	fin:=Integers()!(di/e);
+
+	bi:=h*(n-1) div e;
+	A:=Polynomial(Ry,[&+[omega(Coefficient(rho,j*e+1) div pi_L^(-j*h+bi))*y^j: j in [0..fin]]]);
+	A:=Ry!A;
+	A:=Fx!A;		//Residual Polynomial
+
+	f1:=Segmental_Inertia(A);
+	f:=LCM(f1,UnityIndex(K,e));
+
+	b, b_tilde:=Difference_XGCD(h,e);
+	a, a_tilde:=Difference_XGCD(e,n);
+
+	Fqf:=ResidueClassField(UnramifiedExtension(K,f));
+	Fqf_unitgroup, unitmap:= UnitGroup(Fqf);
+	zeta:=unitmap(Fqf_unitgroup.1);
+
+	Fz<z>:=PolynomialRing(Fqf);
+	A:=Fz!A;
+
+	//Now to find the roots of A and r.
+
+	RR:=Roots(A);
+	u:=[r[1]: r in RR];
+	u1:=u[1];
+
+	if Log(u1) eq 0 then
+		r_prime:=0;
+	else
+		r_prime:=Integers()!(Log(u1^b)/Log(zeta));
+	end if;
+
+	
+	if r_prime in  Seqset([0..(e-1)]) then
+		r:=r_prime;
+
+	else
+		r:=(r_prime mod e);
+
+	end if;	
+
+
+	//Finding M
+
+	Fqf_plus,ADDMap:=AdditiveGroup(Fqf); //ADDMap maps Fqf_plus to Fqf
+	M:=sub<Fqf_plus|Identity(Fqf_plus)>;
+	i:=1;
+
+	state:=Order(M) eq p^m;
+
+
+	while state eq false do
+
+		Cons:=u[i]/(zeta^(r*h));
+		Cons:=Fqf!Cons;
+		psi:=z^e -Cons;
+
+		RRi:=Roots(psi);
+		ui:=[r[1]: r in RRi];
+		gens:=[(a*s)@@ADDMap: s in ui];
+		M:=sub<Fqf_plus|gens cat Setseq(Generators(M))>;
+		i:=i+1;
+
+		state:=Order(M) eq p^m;
+
+	end while;
+	
+	MGens:=Generators(M);
+	V:=VectorSpace(Fp,#MGens);
+	B:=Basis(sub<V|[V!Eltseq(b): b in MGens]>);
+
+	k:=(r*(q-1))/e;
+	l:=(-1+q^f)/e;
+
+	k:=Integers()!k;
+	l:=Integers()!l;
+
+	Expss:=[];	
+
+	for j in [1..Dimension(V)] do
+
+		current:=M.j;
+		current:=ADDMap(current);
+
+		if Log(current) eq 0 then
+			Expss[j]:=0;
+		else
+			Expss[j]:=Integers()!(Log(current)/Log(zeta));
+
+		end if;				
+
+	end for;
+
+
+	S_rows:=[];
+	T_rows:=[];
+
+
+	for s in [1..Dimension(V)] do		//Finding the rows of S using the automorphism s defined on powers of zeta
+
+		j:=Expss[s];
+
+		temp:=zeta^(l*h +j);
+		temp:=temp@@ADDMap;
+		temp:=M!temp;
+		temp:=V!Eltseq(temp);
+
+		temp:=ElementToSequence(temp);
+
+		S_rows[s]:=temp;
+
+	end for;
+
+
+	for t in [1..Dimension(V)] do		//Find the rows of T using the automorphism t defined on powers of zeta
+
+		j:=Expss[t];
+
+		temp:=zeta^(h*k +q*j);
+		temp:=temp@@ADDMap;
+		temp:=M!temp;
+		temp:=V!Eltseq(temp);
+
+		temp:=ElementToSequence(temp);
+
+		T_rows[t]:=temp;  		
+
+	end for;
+
+
+	S:=Matrix(GF(p), S_rows);
+	T:=Matrix(GF(p), T_rows);
+
+	GGLL:=GL(m,Fp);
+
+	S:=GGLL!S;
+	T:=GGLL!T;
+
+	Matgenn:=sub<GGLL|S,T>;
+
+	G:=AffineGroup(Matgenn);
+	
+	return G;
+		
+	//return S,T;
+
+	
+end function;
+
+
+function My_IsomorphismClasses(lis)
+
+	//A:=AssociativeArray(Sym(Degree(lis[1])));   //Associative array with index universe S_n.
+	A:=AssociativeArray();
+	GroupOrders:={Order(g): g in lis};
+
+	GroupsbySize:={};   //Each element is a set of all the groups of a particular order
+	lis:=Set(lis);
+
+	for n in GroupOrders do
+
+		G:={};
+		for H in lis do
+			if Order(H) eq n then
+				G:=G join {H};
+				lis:=lis diff {H};
+			end if;
+		end for;
+
+		GroupsbySize:=GroupsbySize join {G};
+	end for;
+
+
+	for m in GroupsbySize do
+
+		collection:=m;
+
+		while #collection gt 0 do
+			Candidate:=Random(collection);
+			IClass:={Candidate};
+			collection:=collection diff IClass;
+
+			for g in collection do
+				if IsIsomorphic(g,Candidate) then
+					IClass:=IClass join {g};
+					collection:=collection diff {g};
+				end if;
+			end for;
+	
+			A[Candidate]:=IClass;			
+
+		end while;
+
+	end for;
+
+	return A;
+
+end function;
+
+
+function TransitiveIDClasses(lis)
+
+	A:=AssociativeArray();
+	GroupOrders:={Order(g): g in lis};
+
+	GroupsbySize:={};   //Each element is a set of all the groups of a particular order
+	lis:=Set(lis);
+
+	for n in GroupOrders do
+
+		G:={};
+		for H in lis do
+			if Order(H) eq n then
+				G:=G join {H};
+				lis:=lis diff {H};
+			end if;
+		end for;
+
+		GroupsbySize:=GroupsbySize join {G};
+	end for;
+
+	for m in GroupsbySize do
+
+		collection:=m;
+
+		while #collection gt 0 do
+			Candidate:=Random(collection);
+			IClass:={Candidate};
+			collection:=collection diff IClass;
+
+			for g in collection do
+				if TransitiveGroupIdentification(g) eq TransitiveGroupIdentification(Candidate) then
+					IClass:=IClass join {g};
+					collection:=collection diff {g};
+				end if;
+			end for;
+	
+			A[Candidate]:=IClass;			
+
+		end while;
+
+	end for;
+
+	return A;
+
+end function;
+
+
+function CandidateClasses(lis)
+
+	G:=lis[1];
+	n:=Degree(G);
+
+	if n le TransitiveGroupDatabaseLimit() then
+		return TransitiveIDClasses(lis);
+	else
+		return My_IsomorphismClasses(lis);
+	end if;
+
+	return 0;
+
+end function;

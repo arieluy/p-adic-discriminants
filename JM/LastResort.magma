@@ -1,0 +1,319 @@
+
+function CCMY_LiftRoots(GloGenerator,alpha)
+
+	precis:=Precision(alpha[1]);
+	//C:=Parent(alpha[1]);
+	k:=2*precis;
+
+	C:=ComplexField(k);
+	Cx<x>:=PolynomialRing(C);
+	//psi:=Cx!GloGenerator;
+	psi:=GloGenerator;
+	Z:=Integers();
+	beta:=[];
+
+	for j in [1..#alpha] do
+		beta[j]:=HenselLift(Cx!psi,C!alpha[j],k);
+		//beta[j]:=HenselLift(psi,C!alpha[j],k);
+	end for;
+
+	return beta;
+
+end function;
+
+
+function CClift_roots(Psi,alpha,k)
+
+
+	//Compare precision of alpha to k.  If it's already greater than or equal to k don't lift.
+
+	Currentprec:=Precision(Parent(alpha[1]));
+
+	if Currentprec ge k then
+		return alpha;
+	end if;
+
+
+	//Otherwise, lift and maintain root order
+
+	C:=ComplexField(k);
+	Cx<x>:=PolynomialRing(C);
+
+	psi:=Cx!Psi;
+	beta:=[];
+
+	for j in [1..#alpha] do
+		beta[j]:=HenselLift(Cx!psi,C!alpha[j],k);   
+	end for;
+
+        return beta;
+
+end function;
+
+
+
+function CCResolvent(G,H,CRoots,GloGenerator,prec)
+
+	if (H subset G) eq false then
+
+		error "Error: H is not a subgroup of G.";
+	end if;
+
+	if Index(G,H) eq 1 then
+
+		error "Error:  H equals G.";
+	end if;
+
+	//Establish F, a G-relative H-invariant	
+
+	F:=RelativeInvariant(G,H);
+
+	// if VerifyInvariant(F,G,H) then
+		//"Invariant PASSES";
+	// else
+		//"Invariant FAILS";
+	// end if;
+
+	CReps:=RightTransversal(G,H);
+	alpha:=CRoots;
+
+	//C:=Parent(alpha[1]);
+	C:=ComplexField(prec);
+	Cx<x>:=PolynomialRing(C);
+	Z:=Integers();
+
+	beta := CClift_roots(GloGenerator,alpha,prec);
+
+	ResolventFactors:=[];
+
+	for sigma in CReps do
+		Cons:=Evaluate(F^(sigma),beta);
+		Append(~ResolventFactors,x - Cons);
+	end for;
+
+	Res:=&*ResolventFactors;
+	Res:=Cx!Res;
+	
+	coeff:=[];
+
+	for j in [0..(Degree(Res))] do
+		coeff[j+1]:=Round(Re(Coefficient(Res,j)));
+	end for;
+
+	RF:=Polynomial(Z,coeff);
+	"RF",RF;
+
+	if IsitSquareFree(RF) then
+		return RF;
+	end if;
+
+	state:=false;
+
+	while (state eq false) do
+		A:=PartialTschirnhausen( GloGenerator,50);
+		"Tschirn";
+		L:=Parent(beta[1]);
+		Ly:=PolynomialRing(L);
+
+		A:=Ly!A;
+		gamma:=[];
+
+		for k in [1..#beta] do
+			gamma[k]:=Evaluate(A,beta[k]);
+		end for;
+
+		ResolventFactors:=[];
+
+		for sigma in CReps do
+ 			Cons:=Evaluate(F^(sigma),gamma);
+ 			Append(~ResolventFactors,x - Cons);  //Should it be x?  Shouldn't i be using Ly or is it the same as Cx?
+		end for;
+
+		Res:=&*ResolventFactors;
+		Res:=Cx!Res;
+
+		coeff:=[];
+
+		for j in [0..(Degree(Res))] do
+			coeff[j+1]:=Round(Re(Coefficient(Res,j)));
+		end for;
+
+		RF:=Polynomial(Z,coeff);
+		state:=IsitSquareFree(RF);
+        	
+	end while;
+
+	return RF;
+
+end function;
+
+
+function CCGlobalRepBlocks(GloGenerator,Block_Length,alpha,h1)
+
+	EmbedImagess:=[];
+
+	for i in [1..#alpha] do
+		EmbedImagess[i]:=Evaluate(h1,alpha[i]);
+	end for;
+
+	len:=#EmbedImagess;
+
+	Blo:={};  		//Blocks from embedding polynomial
+
+	first:={1};
+
+	Grouppedup:={1};  	//Keep track of numbers 1 thru len that have been grouped up.
+
+	smallestimagee:=Min([AbsoluteValue(a): a in EmbedImagess]);
+
+	for j in [2..len] do
+		temp:=AbsoluteValue(EmbedImagess[1]-EmbedImagess[j]);
+		
+		if temp lt (0.001*smallestimagee) then
+
+			first:=first join {j};
+			Grouppedup:=Grouppedup join {j};
+		end if;
+	end for;
+
+	Blo:=Blo join {first};
+
+	RemainIndex:={1..len} diff Grouppedup; 
+
+	while #Grouppedup lt len do
+
+		a:=Random(RemainIndex);
+		currentblockk:={a};
+
+		Grouppedup:=Grouppedup join {a};
+		RemainIndex:=RemainIndex diff {a};
+
+		if IsEmpty(RemainIndex) then
+			alpha:=CCMY_LiftRoots(GloGenerator,alpha);
+			return CCGlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+		end if;
+
+		for b in RemainIndex do
+			temp:=AbsoluteValue(EmbedImagess[a]-EmbedImagess[b]);
+
+			if temp lt (0.001*smallestimagee) then
+
+				currentblockk:=currentblockk join {b};
+				Grouppedup:=Grouppedup join {b};
+				RemainIndex:=RemainIndex diff {b};
+			end if;
+
+		end for;
+
+		if #currentblockk eq 1 then
+			alpha:=CCMY_LiftRoots(GloGenerator,alpha);
+			return CCGlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+		end if;
+
+		Blo:=Blo join {currentblockk};
+
+	end while;	
+
+	Block_Sizes:={#a: a in Blo};
+
+	bool:={Block_Length} eq Block_Sizes;
+
+	if bool then
+		return Blo, alpha;
+
+	else
+		alpha:=CCMY_LiftRoots(GloGenerator,alpha);
+                return CCGlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+	end if;
+
+	return 	0;
+
+end function;
+
+
+
+function CCResolventFactorization(G,H,CRoots,GloGenerator,p, prec)
+
+//Computes the relative resolvent for H<G. 
+//The degrees of the irreducible factors of the resolvent are tallied and returned.
+
+	RF:=CCResolvent(G,H,CRoots,GloGenerator,prec);
+	FF:=pFactorDegrees(p,RF);
+	FactorList:=Set(tally(FF));
+
+	return FactorList;
+
+end function;
+
+
+
+ 
+function CCRelativeResolventFilter(W, Candidates,UpperLimit, alpha, GloGenerator,p,prec)
+
+//For now, LowIndexSubgroups up to n^2
+	
+	Current:=2;
+
+	while (Current lt UpperLimit) do
+
+		J:=LowIndexSubgroups(W,<Current,Current>);
+
+		for H in J do
+
+			FactorList:=CCResolventFactorization(W,H,alpha,GloGenerator,p, prec);
+			Candidates:=[G: G in Candidates |Resolvent_OrbitLengthTest(W,G, H, FactorList)];
+			
+			if #Candidates le 1 then
+
+				return Candidates;
+			end if;
+
+		end for;
+		
+		Current:=Current +1;
+		
+	end while;
+		
+	return Candidates;
+	
+end function;
+
+
+function CCCheck_Group(G,H,alpha,GloGenerator,prec,p)
+
+//Forms the relative resolvent for the group pair H<G and checks to see if the galois group of glogenerator is contained in a conjugate of H.
+
+	RF:=CCResolvent(G,H,alpha,GloGenerator,prec);
+	Zp:=pAdicRing(p,900);
+	Zx<x>:=PolynomialRing(Zp);
+
+	RF:=Zx!RF;
+
+	//"RF",RF;
+
+	return HasRoot(RF);
+
+end function;
+
+
+function CCTestStartingGroup(W, alpha,GloGenerator,prec,p)
+
+//W is the starting group
+//M is the complex bound on the pRoots alpha.
+
+	Max_Can:=MaximalSubgroups(W); 
+
+	C:=[r`subgroup: r in Max_Can];
+	
+	for c in C do
+		
+		bool:=CCCheck_Group(W,c,alpha,GloGenerator,prec,p);
+
+		if bool then
+			return false;
+		end if;
+	end for;
+
+	return true;
+
+end function;

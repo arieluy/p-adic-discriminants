@@ -1,0 +1,809 @@
+function fac(f,p)
+
+	Fp:=FiniteField(p);
+	Fpx<x>:=PolynomialRing(Fp);
+	ff:=Factorization(Fpx!f);
+	
+	return [<Degree(g[1]),g[2]>: g in ff];
+
+end function;
+
+
+
+function ChoosePrime(f)
+
+	//p:=Degree(f);
+	//np:=Max(20,p);  //number of primes to find.  Will be decreased.
+
+	p:=1;
+	np:=20 + Degree(f); //number of primes to find.  Will be decreased.
+
+	lp:=[];
+
+	d:=Discriminant(f)*LeadingCoefficient(f);
+
+	//while (#lp lt 1) and (np gt 0) do
+
+	while #lp lt 1 do
+
+		while (np gt 0) do
+			p:=NextPrime(p);
+		
+			if d mod p ne 0 then
+
+				np:=np-1;
+				h:=PolynomialRing(FiniteField(p))!f;
+
+				ff:=Factorization(h);
+				degs:=[Degree(ff[i][1]): i in [1..#ff]];
+
+				Append(~lp, <p,Sort(degs),Lcm(degs)>);
+			end if;
+
+		end while;
+
+		np:=10;
+
+	end while;
+
+	Third:=[];  //list of Lcm(degs) = inertia.
+
+	for j in [1..#lp] do
+		Third[j]:=lp[j][3];
+	end for;
+
+	m,pos:=Minimum(Third);
+
+	q:=lp[pos][1];
+
+	return q,m;
+
+end function;
+
+
+
+function PartialTschirnhausen(P,q)
+        Z:=Integers();
+        Zx<x>:=PolynomialRing(Z);
+       
+	n:=My_Degree(P);
+        T:=[Random(0,q):i in [1..n-2]];
+	A :=  x+x^2*Polynomial(Z,T);
+
+vprint GaloisTower,3: "Partial Tschirnhausen",A;        
+        return A;
+
+end function;
+
+
+function MyComplexRootss(f,Prec)
+
+	f:=PolynomialRing(Integers())!f;
+
+	C:= ComplexField(Prec);
+	Cx<x>:=PolynomialRing(C);
+
+	f:=Cx!f;
+
+	RRoots:=Roots(f);
+	alpha:=[];
+
+	for i in [1..#RRoots] do
+		alpha[i]:=RRoots[i][1];
+	end for;
+
+	return alpha;
+
+end function;
+
+
+function FujiwaraBound(f)
+
+  //Returns the Fujiwara bound for the absolute value of the complex roots of f
+
+	c := Eltseq(f); _n := #c;
+
+	max_comp := Maximum([Abs(c[_n-i]/c[_n])^(1/i) : i in [1.._n-2]] cat [0]);
+	max_comp := 2*Maximum(max_comp, Abs(c[1]/2/c[_n])^(1/(_n-1)));
+   
+	return Ceiling(max_comp); //Fujiwara bound
+
+end function;
+
+
+
+function MY_LiftRoots(GloGenerator,alpha)
+
+//double precision of roots.
+
+	precis:=Precision(alpha[1]);
+	C:=Parent(alpha[1]);
+	k:=2*precis;
+
+	ChangePrecision(~C,k);
+	Cx<x>:=PolynomialRing(C);
+	//psi:=Cx!GloGenerator;
+	psi:=GloGenerator;
+	Z:=Integers();
+	beta:=[];
+
+	for j in [1..#alpha] do
+		beta[j]:=HenselLift(Cx!psi,C!alpha[j],k);
+		//beta[j]:=HenselLift(psi,C!alpha[j],k);
+	end for;
+
+	return beta;
+
+end function;
+
+
+function lift_roots(Psi,alpha,k)
+
+
+	//Compare precision of alpha to k.  If it's already greater than or equal to k don't lift.
+
+	Currentprec:=Precision(Parent(alpha[1]));
+
+	if Currentprec ge k then
+		return alpha;
+	end if;
+
+
+	//Otherwise, lift and maintain root order
+
+	C:=Parent(alpha[1]);
+	q:=Prime(C);   
+        ChangePrecision(~C,k);
+ 	Cx<x>:=PolynomialRing(C);
+	psi:=Cx!Psi;
+	beta:=[];
+
+	for j in [1..#alpha] do
+		beta[j]:=HenselLift(Cx!psi,C!alpha[j],k);   
+	end for;
+
+        return beta;
+
+end function;
+
+
+function pAdicRoot_Approx(f,Precis)
+
+	f:=PolynomialRing(Integers())!f;
+	
+	p,m:=ChoosePrime(f);
+	Prec:=10 + Valuation(Discriminant(f),p) + Precis;
+
+	Zp:=pAdicRing(p,Prec);
+	
+	if m gt 1 then
+		U:=UnramifiedExtension(Zp,m);
+	else
+		U:=Zp;
+	end if;
+
+	Ux:=PolynomialRing(U);
+	f:=Ux!f;
+
+	RRoots:=Roots(f);
+	alpha:=[];
+
+	for i in [1..#RRoots] do
+		alpha[i]:=RRoots[i][1];
+	end for;
+
+	return alpha;
+
+end function;
+
+
+
+function VerifyInvariant(F,G,H)
+	//Check that F is a G-relative H-invariant.
+	//Currently uses the IsInvariant command which is true to high probability.  May replace this with commented bit if not convinced.
+
+	if (H subset G) eq false then
+
+		error "Error: H is not a subgroup of G.";
+	end if;
+
+	if Index(G,H) eq 1 then
+		error "Error:  H equals G.";
+	end if;
+
+	n:=Degree(G);
+
+	G:=Set(G);
+	H:=Set(H);
+	D:=G diff H;
+	
+	//Hcheck:={IsInvariant(F,sigma):sigma in H};  //Correct with high probability.
+	//Gcheck:={IsInvariant(F,sigma):sigma in D};  //Check difference in G and H
+
+
+	//Hcheck:={(F^sigma eq F):sigma in H};
+	//Gcheck:={(F^sigma eq F):sigma in D}; //Not wise.  ONly recognizes equality when sigma is identity.
+
+
+	Z:=Integers();
+	Zx<[X]>:=PolynomialRing(Z,n);
+	xvector:=[];
+
+	for i in [1..n] do
+
+		xvector[i]:=X[i];
+
+	end for;
+	
+	Hcheck:={(Evaluate(F^sigma,xvector) eq Evaluate(F,xvector)):sigma in H};  //Not a good idea for high degree but irrefutable.
+	Gcheck:={(Evaluate(F^sigma,xvector) eq Evaluate(F,xvector)):sigma in D}; 
+
+	boolH:=Hcheck eq {true};
+
+	if boolH  then
+
+		boolG:=Gcheck eq {false};
+
+		if boolG then
+
+			return true;
+
+		end if;
+
+	end if;
+
+	return false;
+
+end function;
+
+
+
+function Resolvent(G,H,pRootss,M,GloGenerator)
+
+//M is the complex bound on the pRoots.
+	Z:=Integers();
+
+	if (H subset G) eq false then
+
+		error "Error: H is not a subgroup of G.";
+	end if;
+
+	if Index(G,H) eq 1 then
+
+		error "Error:  H equals G.";
+	end if;
+
+	//Establish F, a G-relative H-invariant	
+
+	F:=RelativeInvariant(G,H);
+
+	//if VerifyInvariant(F,G,H) then
+		//"Invariant PASSES";
+	//else
+		//"Invariant FAILS";
+	//end if;
+
+	CReps:=RightTransversal(G,H);
+	alpha:=pRootss;
+        
+	N:=Bound(GaloisGroupInvariant(G,H),Abs(M));  //to be modified later
+
+	C:=Parent(alpha[1]);
+	q:=Prime(C);   
+	k:=400*Ceiling(Log(q,2*N+1) +1);
+	k;
+	
+        beta := lift_roots(GloGenerator,alpha,k);
+
+	C:=Parent(beta[1]);
+	ChangePrecision(~C,k);
+	Cx<x>:=PolynomialRing(C);
+
+	modulus := Prime(C)^Precision(C);
+
+	// Now find coset reps for G/H
+
+	ResolventFactors:=[];
+
+	for sigma in CReps do
+		Cons:=Evaluate(F^(sigma),beta);
+		Append(~ResolventFactors,x - C!Cons);
+	end for;
+
+	Res:=&*ResolventFactors;
+	Res:=Cx!Res;
+
+	coeff:=[];
+
+	for j in [0..(Degree(Res))] do
+		a := Z!Coefficient(Res,j);
+ 		if a lt (modulus div 2) then
+ 			coeff[j+1]:=a;
+ 		else 
+                	coeff[j+1]:=a-modulus;
+		end if;
+ 	end for;
+
+	RF:=Polynomial(Z,coeff);
+
+	if IsitSquareFree(RF) then
+		return RF;
+	end if;
+
+	state:=false;
+
+	while (state eq false) do
+		A:=PartialTschirnhausen(GloGenerator,q); 
+
+		N:=Bound(GaloisGroupInvariant(G,H),Abs(Evaluate(A,M)));
+		k:=400*Ceiling(Log(q,2*N+1) +1);
+		k;
+		
+		beta := lift_roots(GloGenerator,beta,k);
+
+		L:=Parent(beta[1]);
+		ChangePrecision(~L,k);
+		Ly<y>:=PolynomialRing(L);
+
+		A:=Ly!A;
+		gamma:=[];
+
+		for k in [1..#beta] do
+			gamma[k]:=Evaluate(A,beta[k]);
+		end for;
+
+		ResolventFactors:=[];
+		modulus := Prime(L)^Precision(L);
+
+		for sigma in CReps do
+ 			Cons:=Evaluate(F^(sigma),gamma);
+ 			Append(~ResolventFactors,(y - L!Cons));  //Should it be x?  Shouldn't i be using Ly or is it the same as Cx?
+		end for;
+
+		Res:=&*ResolventFactors;
+		Res:=Cx!Res;
+
+		coeff:=[];
+
+ 		for j in [0..(Degree(Res))] do
+			a := Z!Coefficient(Res,j);
+ 			if a lt (modulus div 2) then
+ 		                coeff[j+1]:=a;
+ 		        else 
+                                coeff[j+1]:=a-modulus;
+                        end if;
+ 		end for;
+
+ 		RF:=Polynomial(Z,coeff);
+		state:=IsitSquareFree(RF);
+        	
+	end while;
+
+	return RF;
+
+end function;
+
+
+function GGlobalRepresentation(phi,L0)
+vprint GaloisTower,2: "Global representation";
+	phi:=reduce_poly(phi);
+
+	K:=CoefficientRing(phi);
+	n:=Degree(phi);
+//vprint GaloisTower,2: "deg(phi) =",n;
+	KK:=PolynomialRing(K);
+	phi:=KK!phi;
+
+	ChangePrecision(~phi,Precision(K));
+
+	Q:=Rationals();
+	Z:=Integers();
+	Zw<w>:=PolynomialRing(Z);
+
+	R:=Z;
+	Rxy<x,y>:=PolynomialRing(R,2);
+	
+	L1:=BaseRing(L0);
+	g1 := DefiningPolynomial(L1,PrimeRing(L1));
+	g1:=Zw!g1;
+	g1:= Evaluate(g1,y);
+	//g1:=Rxy!g1;		//Maybe comment out.
+
+
+	psi :=DefiningPolynomial(L0);
+	psi :=reduce_poly(psi);
+        ChangePrecision(~psi,Precision(L1));
+//vprint GaloisTower,2: "g1 =",g1;
+ 
+        //g1:=DefiningPolynomial(L1,PrimeRing(L1));
+//"L0",L0;
+//"BaseRing(L1)",BaseRing(L1);
+//"PrimeRing(L1)",PrimeRing(L1);
+//"AbsoluteTotallyRamifiedExtension",AbsoluteTotallyRamifiedExtension(L1);
+	
+        f:=&+[x^i*(&+[y^(j-1)*Integers()!Coefficient(Coefficient(psi,i),j): j in [1..Degree(L1)]]): i in [0..Degree(psi)]];
+	f:=Rxy!f;
+//"f",f;
+	GloGenerator:=Resultant(f,g1,y);
+	GloGenerator:=UnivariatePolynomial(GloGenerator);
+        
+        ired := IsIrreducible(KK!GloGenerator);
+        isom := IsIsomorphic(phi,KK!GloGenerator);
+
+//"ired", ired;
+//"isom", isom;
+	while not (isom and ired) do
+
+vprint GaloisTower,2: "Bad global generator";
+		t:=PartialTschirnhausen(phi,50);	//Let t(y) be a random polynomial
+		t:=Evaluate(t,y);
+		t:=Rxy!t;
+
+		f:=Evaluate(f, [x-t,y]);      //Let the new f be f(x-t(y),y) 
+		f:=Rxy!f;
+
+		GloGenerator:=Resultant(f,g1,y);
+		GloGenerator:=UnivariatePolynomial(GloGenerator);	//Then compute the resultant of this new f and the original g.
+        
+                ired := IsIrreducible(KK!GloGenerator);
+                isom := IsIsomorphic(phi,KK!GloGenerator);
+//"ired", ired;
+//"isom", isom;
+	end while;
+
+	H:=ext<Q|GloGenerator>;
+	Hr<r>:=PolynomialRing(H);
+
+	g1:=UnivariatePolynomial(g1);	
+	RR:=Roots((Hr!g1):Max:=1)[1][1];
+	
+	h1:=PolynomialRing(Q)!Eltseq(RR);  //Embedding polynomial
+
+	m1:=Degree(g1);
+	Block_Length:=(Integers()!(n/m1));
+
+	First:=ext<Q|g1>;
+	Fz<z>:=PolynomialRing(First);
+	
+	ff:=Factorization(Fz!GloGenerator);
+
+	tau:=ff[1][1];
+	//Wholee:=ext<First|tau>;
+
+	Gal1:=GaloisGroup(tau);
+	Gal2:=GaloisGroup(g1);
+
+	Wprime:=WreathProduct(Gal1,Gal2);
+	ba, im, ker:=BlocksAction(Wprime,{1..Degree(Gal1)});
+	WreathBlocksprime:=Orbits(ker);
+
+	WreathBlocksprime:=Set(WreathBlocksprime);
+	WreathBlocksprime:={Set(v): v in WreathBlocksprime};
+
+	return GloGenerator, h1, Block_Length,Wprime,WreathBlocksprime;
+
+end function;
+
+
+function GlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+
+	EmbedImagess:=[];
+
+	for i in [1..#alpha] do
+		EmbedImagess[i]:=Evaluate(h1,alpha[i]);
+	end for;
+
+	len:=#EmbedImagess;
+
+	Blo:={};  		//Blocks from embedding polynomial
+
+	first:={1}; 		//First block.
+	first_val:=Valuation(EmbedImagess[1]);
+
+	Grouppedup:={1};  	//Keep track of numbers 1 thru len that have been grouped up.
+
+	for j in [2..len] do
+
+		if first_val eq Valuation(EmbedImagess[j]) then
+
+			if Valuation(EmbedImagess[j] - EmbedImagess[1]) gt (first_val + 5) then
+
+				first:=first join {j};
+				Grouppedup:=Grouppedup join {j};
+			end if;
+
+		end if;
+
+	end for;
+
+	Blo:=Blo join {first};
+
+	RemainIndex:={1..len} diff Grouppedup; 
+
+	while #Grouppedup lt len do
+
+		a:=Random(RemainIndex);
+		currentblockk:={a};
+		comp_val:=Valuation(EmbedImagess[a]);
+
+		Grouppedup:=Grouppedup join {a};
+		RemainIndex:=RemainIndex diff {a};
+
+		if IsEmpty(RemainIndex) then
+			alpha:=MY_LiftRoots(GloGenerator,alpha);
+			return GlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+		end if;
+
+		
+		for b in RemainIndex do
+
+			if comp_val eq Valuation(EmbedImagess[b]) then
+
+				if Valuation(EmbedImagess[a]-EmbedImagess[b]) gt (comp_val + 5) then
+
+					currentblockk:=currentblockk join {b};
+					Grouppedup:=Grouppedup join {b};
+					RemainIndex:=RemainIndex diff {b};
+				end if;
+
+			end if;
+
+		end for;  //line 381
+
+		if #currentblockk eq 1 then
+			alpha:=MY_LiftRoots(GloGenerator,alpha);
+			return GlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+		end if;
+
+		Blo:=Blo join {currentblockk};
+
+	end while;	
+
+	Block_Sizes:={#a: a in Blo};
+
+	bool:={Block_Length} eq Block_Sizes; 
+
+	if bool then
+		return Blo, alpha;
+
+	else
+		alpha:=MY_LiftRoots(GloGenerator,alpha);
+                return GlobalRepBlocks(GloGenerator,Block_Length,alpha,h1);
+	end if;
+
+	return 	0;
+
+end function;
+
+
+function FindOneBlock(blo)
+
+//Input: a set of blocks.
+
+//Output:  the block containing 1.
+
+        state:=false;
+
+        while state eq false do
+                b:=Random(blo);
+                state:=(1 in b) or IsEmpty(blo);
+
+                blo:=blo diff {b};
+        end while;
+
+        return b;
+
+end function;
+
+
+function ReOrderRoots(sigma,alpha)
+
+        B:=[];
+
+        for i in [1..#alpha] do
+
+                B[Image(sigma,i)]:=alpha[i];
+
+        end for;
+
+        return B;
+
+end function;
+
+
+function MatchBlocks(WreathBlocks, SubfieldBlocks,n)
+
+//Input:  Blocks from WreathProduct for Starting group and blocks from creating an embedding function with subfield.  The embedding function uses a global rep.  Third input is an integer n.
+
+//Output: a permutation that send the blocks of the subfields to the blocks of the wreath product.  Permutation is a element of Sn.
+	
+	if #WreathBlocks ne #SubfieldBlocks then
+		error "Error:  number of blocks is not equal.";
+	end if;
+
+	FirstW:=FindOneBlock(WreathBlocks);
+	FirstS:=FindOneBlock(SubfieldBlocks);
+
+	WreathBlocks:=WreathBlocks diff {FirstW};
+	SubfieldBlocks:=SubfieldBlocks diff {FirstS};
+
+	Bmap:=[];  // if 3 is sent to 4 then Bmap[3] = 4.
+	
+	Bmap[1]:=1;
+	FirstW:=FirstW diff {1};
+	FirstS:=FirstS diff {1};
+
+	FW:=Setseq(FirstW);
+	FS:=Setseq(FirstS);
+
+	for k in [1..#FW] do
+		Bmap[FS[k]]:=FW[k];
+	end for;
+
+	WreathBlocks:=Setseq(WreathBlocks);
+	SubfieldBlocks:=Setseq(SubfieldBlocks);
+	Sn:=Sym(n);
+	
+	for i in [1..#WreathBlocks] do
+		W:=WreathBlocks[i];
+		S:=SubfieldBlocks[i];
+
+		//we will send the elements in S to W
+
+		W:=Setseq(W);
+		S:=Setseq(S);
+
+		if #W ne #S then
+			error "Error:  blocks aren't the same size.";
+		end if;
+
+
+		for j in [1..#S] do
+			w:=W[j];
+			s:=S[j]; 
+			Bmap[s]:=w;
+
+		end for;
+
+	end for;
+
+	sigma:=Sn!Bmap;
+
+	return sigma;
+
+end function;
+
+
+function ResolventFactorization(G,H,pRootss,M,GloGenerator,p)
+
+//Computes the relative resolvent for H<G. 
+//The degrees of the irreducible factors of the resolvent are tallied and returned.
+
+	RF:=Resolvent(G,H,pRootss,M,GloGenerator);
+	FF:=pFactorDegrees(p,RF);
+	FactorList:=Set(tally(FF));
+
+	return FactorList;
+
+end function;
+
+
+function Resolvent_OrbitLengthTest(W,Candidate, H, ResolventFactorList)
+
+	G:=Candidate;
+	m:=Order(W)/Order(H);
+
+	a,b,c:=CosetAction(W,H);
+	phi_G:=a(G);
+
+	Orbb:=Orbits(phi_G);
+	Orb_lengths:=[#r: r in Orbb];
+	
+	Orb_lengths:=Set(tally(Orb_lengths));
+
+vprintf GaloisTower,3: "Orbit lengths %o, %oT%o\n", Orb_lengths, Degree(Candidate), TransitiveGroupIdentification(Candidate);
+
+	return Orb_lengths eq ResolventFactorList;
+
+end function;
+
+function RelativeResolventFilter(W, Candidates,UpperLimit, alpha, M, GloGenerator,p)
+
+
+vprint GaloisTower,2: "Filtering: Relative resolvent -- Remaining candidates:", #Candidates;
+vprint GaloisTower,3: "-- Candidates",Degree(Candidates[1]),"T",[TransitiveGroupIdentification(r): r in Candidates];
+vprint GaloisTower,3: "-- Candidates", [r: r in Candidates];
+vprint GaloisTower,3: "-- Candidate orders", [#r: r in Candidates];
+vprint GaloisTower,3: "-- Candidate indices", [#W/#r: r in Candidates];
+//"inclusions", [<#a[1],#a[2],a[1] subset a[2]>: a in CartesianProduct(Candidates,Candidates)];
+
+//For now, LowIndexSubgroups up to n^2
+
+	Current:=1;
+        D := Divisors(#W);
+        vprintf GaloisTower,3: "-- Index:";
+	while (D[Current] lt UpperLimit) do
+
+vprintf GaloisTower,3: " %o,", Current;
+
+//MaxIndex:=1200;
+//MSG := MaximalSubgroups(W);
+//MSG := [s:s in MSG|#W/#(s`subgroup) lt MaxIndex
+//While #MSG gt 0 do
+//"#MSG",#MSG;
+//for s in MSG do
+//H := s`subgroup;
+
+
+		J:=LowIndexSubgroups(W,<D[Current],D[Current]>);
+                 
+		for H in J do
+			if NeedResolvent(W,H,Candidates) then
+
+				FactorList:=ResolventFactorization(W,H,alpha,M,GloGenerator,p);
+				Candidates:=[G: G in Candidates |Resolvent_OrbitLengthTest(W,G, H, FactorList)];
+				
+vprint GaloisTower,3: "";
+vprint GaloisTower,2: "Filtering Relative resolvent -- Remaining candidates:", #Candidates;
+vprint GaloisTower,3: "-- Candidates", [TransitiveGroupIdentification(r): r in Candidates];
+vprintf GaloisTower,3: "-- Index:";
+
+				if #Candidates le 1 then
+
+					return Candidates;
+				end if;
+			end if;
+
+		end for;
+		
+		Current:=Current +1;		
+
+// MSG := Flat([MaximalSubgroups(s`subgroup):s in MSG]);
+// MSG := [s:s in MSG|#W/#(s`subgroup) lt MaxIndex];
+
+	end while;
+
+	return Candidates;
+	
+end function;
+
+
+
+function Check_Group(G,H,alpha,M,GloGenerator,p)
+
+//Forms the relative resolvent for the group pair H<G and checks to see if the galois group of glogenerator is contained in a conjugate of H.
+
+	RF:=Resolvent(G,H,alpha,M,GloGenerator);
+	Zp:=pAdicRing(p,900);
+	Zx<x>:=PolynomialRing(Zp);
+
+	RF:=Zx!RF;
+
+	return HasRoot(RF);
+
+end function;
+
+
+
+function TestStartingGroup(W, alpha,M,GloGenerator,p)
+
+//W is the starting group
+//M is the complex bound on the pRoots alpha.
+
+	Max_Can:=MaximalSubgroups(W); 
+
+	C:=[r`subgroup: r in Max_Can];
+	
+	for c in C do
+		
+		bool:=Check_Group(W,c,alpha,M,GloGenerator,p);
+
+		if bool then
+			return false;
+		end if;
+	end for;
+
+	return true;
+
+end function;
+
